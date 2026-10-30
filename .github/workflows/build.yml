@@ -31,11 +31,13 @@ jobs:
           echo $ENCODED_KEYSTORE | base64 --decode > app/keystore/andik_une.jks
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
         env:
           ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_KEY_ALIAS: "Andik Une"
           ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       - name: Sign APK (Android Build Tools)
         uses: r0adkll/sign-android-release@v1
