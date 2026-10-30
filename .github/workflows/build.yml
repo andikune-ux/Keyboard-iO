@@ -40,7 +40,7 @@ jobs:
         run: gradle assembleRelease
 
       - name: Sign APK (Android Build Tools)
-        uses: r0adkll/sign-android-release@v7.5.0
+        uses: r0adkll/sign-android-release@7.5.0
         id: sign_app
         with:
           releaseDirectory: app/build/outputs/apk/release
