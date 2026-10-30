@@ -1,0 +1,6 @@
+{
+  "name": "Keyboard iO",
+  "description": "Custom RGB neon keyboard with dynamic QWERTY layout, one-handed mode, floating layout, emoji panel, clipboard manager, and RGB theme effects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
