@@ -10,12 +10,12 @@ plugins {
 
 android {
   namespace = "dev.andikune.keyboardio"
-  compileSdk = 35 // Disesuaikan, biasanya angka fix bukan fungsi release() kecuali ada custom logic
+  compileSdk = 36 // DIKEMBALIKAN KE 36 UNTUK MENDUKUNG ANDROIDX 1.18.0
 
   defaultConfig {
     applicationId = "dev.andikune.keyboardio"
     minSdk = 24
-    targetSdk = 35 // Disesuaikan ke target stabil
+    targetSdk = 36 // DIKEMBALIKAN KE 36
     versionCode = 1
     versionName = "1.0.0"
 
