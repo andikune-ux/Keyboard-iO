@@ -95,6 +95,7 @@ class KeyboardInputMethodService : InputMethodService(),
         // ComposeView tidak cukup jika owner hanya dipasang pada dirinya sendiri:
         // pada sebagian Android 12/OEM, WindowRecomposer mencari owner dari parent
         // window root milik InputMethodService. Gunakan root container eksplisit.
+        installWindowTreeOwners()
         return FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -124,6 +125,21 @@ class KeyboardInputMethodService : InputMethodService(),
                     }
                 }
             })
+        }
+    }
+
+    private fun installWindowTreeOwners() {
+        runCatching {
+            // InputMethodService membungkus input view ke dalam parentPanel milik
+            // Dialog. Owner pada decor root membuat lookup Compose menjangkau
+            // parentPanel tersebut, termasuk pada Android 12 vendor skin.
+            getWindow()?.window?.decorView?.let { decorView ->
+                decorView.setViewTreeLifecycleOwner(this)
+                decorView.setViewTreeViewModelStoreOwner(this)
+                decorView.setViewTreeSavedStateRegistryOwner(this)
+            }
+        }.onFailure { exception ->
+            Log.e(TAG, "Gagal memasang lifecycle owners pada window IME", exception)
         }
     }
 
