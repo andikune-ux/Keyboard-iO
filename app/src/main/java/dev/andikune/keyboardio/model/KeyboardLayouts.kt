@@ -91,7 +91,7 @@ object KeyboardLayouts {
      * - Posisi bekas tombol emoji digantikan oleh Tombol Koma ( , )
      * - Spacebar menggunakan spacebarLabel kustom
      */
-    fun getQwertyRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
+    fun getQwertyRow4(enterLabel: String = "↵", spacebarLabel: String = "␣"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "?123",
@@ -180,7 +180,7 @@ object KeyboardLayouts {
         return list
     }
 
-    fun getSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
+    fun getSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "␣"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",
@@ -266,7 +266,7 @@ object KeyboardLayouts {
         return list
     }
 
-    fun getMoreSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
+    fun getMoreSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "␣"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",

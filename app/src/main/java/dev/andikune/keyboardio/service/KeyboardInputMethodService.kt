@@ -130,6 +130,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         editorStateFlow = editorState,
                         composingWordFlow = composingWord,
                         voiceInputManager = voiceInputManager,
+                        audioFeedback = audioFeedback,
                         onKeyAction = { handleKeyAction(it) },
                         onSecondaryChar = { commitText(it) },
                         onPasteText = { commitText(it) },
@@ -177,14 +178,22 @@ class KeyboardInputMethodService : InputMethodService(),
 
         val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE || classType == InputType.TYPE_CLASS_NUMBER
 
+        val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
+                ((inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0)
+        val noEnterAction = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
+
         val imeAction = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
-        val enterAction = when (imeAction) {
-            EditorInfo.IME_ACTION_SEARCH -> EnterActionType.SEARCH
-            EditorInfo.IME_ACTION_SEND -> EnterActionType.SEND
-            EditorInfo.IME_ACTION_GO -> EnterActionType.GO
-            EditorInfo.IME_ACTION_NEXT -> EnterActionType.NEXT
-            EditorInfo.IME_ACTION_DONE -> EnterActionType.DONE
-            else -> EnterActionType.RETURN
+        val enterAction = if (isMultiline && (noEnterAction || imeAction == EditorInfo.IME_ACTION_NONE || imeAction == EditorInfo.IME_ACTION_UNSPECIFIED || imeAction == EditorInfo.IME_ACTION_DONE)) {
+            EnterActionType.RETURN
+        } else {
+            when (imeAction) {
+                EditorInfo.IME_ACTION_SEARCH -> EnterActionType.SEARCH
+                EditorInfo.IME_ACTION_SEND -> EnterActionType.SEND
+                EditorInfo.IME_ACTION_GO -> EnterActionType.GO
+                EditorInfo.IME_ACTION_NEXT -> EnterActionType.NEXT
+                EditorInfo.IME_ACTION_DONE -> if (isMultiline) EnterActionType.RETURN else EnterActionType.DONE
+                else -> EnterActionType.RETURN
+            }
         }
 
         editorState.value = KeyboardEditorState(
@@ -280,14 +289,28 @@ class KeyboardInputMethodService : InputMethodService(),
             }
             is KeyAction.Enter -> {
                 val editorInfo = currentInputEditorInfo
+                val inputType = editorInfo?.inputType ?: 0
+                val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
+                        ((inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0)
                 val imeOptions = editorInfo?.imeOptions ?: 0
                 val actionId = imeOptions and EditorInfo.IME_MASK_ACTION
-                if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                val noEnterAction = (imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
+
+                if (isMultiline) {
+                    if (noEnterAction || actionId == EditorInfo.IME_ACTION_NONE || actionId == EditorInfo.IME_ACTION_UNSPECIFIED || actionId == EditorInfo.IME_ACTION_DONE) {
+                        ic.commitText("\n", 1)
+                    } else {
+                        ic.performEditorAction(actionId)
+                    }
+                } else if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
                     ic.performEditorAction(actionId)
                 } else {
-                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                    if (!ic.commitText("\n", 1)) {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                    }
                 }
+                undoStack.push("\n")
                 composingWord.value = ""
             }
             is KeyAction.SwitchIme -> {

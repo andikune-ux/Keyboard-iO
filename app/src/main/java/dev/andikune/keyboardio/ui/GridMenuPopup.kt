@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ViewStream
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -72,6 +73,7 @@ fun GridMenuPopup(
     onTranslateClick: () -> Unit,
     onNicknameFontClick: () -> Unit,
     onVoiceInputClick: () -> Unit,
+    onSoundClick: () -> Unit = {},
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -138,6 +140,13 @@ fun GridMenuPopup(
             subtitle = "Dikte bicara",
             icon = Icons.Default.Mic,
             color = rgbTheme.accent
+        ),
+        GridMenuItem(
+            id = "sound",
+            title = "Suara Tombol",
+            subtitle = "Getar & Suara",
+            icon = Icons.Default.VolumeUp,
+            color = rgbTheme.primary
         )
     )
 
@@ -189,7 +198,7 @@ fun GridMenuPopup(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Grid of 9 items
+        // Grid of items
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -212,6 +221,7 @@ fun GridMenuPopup(
                             "translate" -> onTranslateClick()
                             "nickname_font" -> onNicknameFontClick()
                             "voice_input" -> onVoiceInputClick()
+                            "sound" -> onSoundClick()
                         }
                     }
                 )

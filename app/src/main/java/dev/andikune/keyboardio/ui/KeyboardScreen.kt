@@ -8,12 +8,15 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import dev.andikune.keyboardio.service.KeyboardAudioFeedback
 import dev.andikune.keyboardio.data.OfflineTranslator
 import dev.andikune.keyboardio.data.SmartDeleteEngine
 import androidx.compose.foundation.Canvas
@@ -39,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
@@ -48,6 +52,7 @@ import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Undo
@@ -114,6 +119,7 @@ fun KeyboardScreen(
     editorStateFlow: StateFlow<KeyboardEditorState>,
     composingWordFlow: StateFlow<String>,
     voiceInputManager: VoiceInputManager? = null,
+    audioFeedback: KeyboardAudioFeedback? = null,
     onKeyAction: (KeyAction) -> Unit,
     onSecondaryChar: (String) -> Unit,
     onPasteText: (String) -> Unit,
@@ -166,6 +172,7 @@ fun KeyboardScreen(
 
     var layoutMode by remember { mutableStateOf(KeyboardLayoutMode.QWERTY_LOWER) }
     var activePanel by remember { mutableStateOf(ActivePanel.NONE) }
+    var isToolsOpen by remember { mutableStateOf(false) }
     var activeWave by remember { mutableStateOf<AuroraWave?>(null) }
     val waveAnim = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
@@ -378,6 +385,9 @@ fun KeyboardScreen(
                 rgbTheme = rgbTheme,
                 isPassword = editorState.isPassword,
                 suggestions = suggestions,
+                isToolsOpen = isToolsOpen,
+                isTranslateMode = isTranslateMode,
+                onToggleTools = { isToolsOpen = !isToolsOpen },
                 onSuggestionPicked = effectiveSuggestionPicked,
                 onOpenGridMenu = {
                     activePanel = if (activePanel == ActivePanel.GRID_MENU) ActivePanel.NONE else ActivePanel.GRID_MENU
@@ -419,6 +429,10 @@ fun KeyboardScreen(
                     onInsertTranslation = { text ->
                         onPasteText(text)
                         translateSourceText = ""
+                    },
+                    onPasteFromClipboard = {
+                        val clip = clipboardItems.firstOrNull()?.text
+                        if (!clip.isNullOrBlank()) translateSourceText = clip
                     },
                     onClose = {
                         isTranslateMode = false
@@ -467,6 +481,9 @@ fun KeyboardScreen(
                             onVoiceInputClick = {
                                 activePanel = ActivePanel.VOICE_INPUT
                                 voiceInputManager?.startListening()
+                            },
+                            onSoundClick = {
+                                activePanel = ActivePanel.SOUND_SETTINGS
                             },
                             onCloseClick = { activePanel = ActivePanel.NONE }
                         )
@@ -532,6 +549,14 @@ fun KeyboardScreen(
                                 voiceInputManager?.stopListening()
                                 activePanel = ActivePanel.NONE
                             }
+                        )
+                    }
+                    ActivePanel.SOUND_SETTINGS -> {
+                        SoundSettingsPanel(
+                            preferences = preferences,
+                            audioFeedback = audioFeedback,
+                            rgbTheme = rgbTheme,
+                            onClose = { activePanel = ActivePanel.NONE }
                         )
                     }
                     ActivePanel.NONE -> {}
@@ -796,6 +821,9 @@ private fun TopHeaderBar(
     rgbTheme: RgbThemeStyle,
     isPassword: Boolean,
     suggestions: List<String>,
+    isToolsOpen: Boolean,
+    isTranslateMode: Boolean,
+    onToggleTools: () -> Unit,
     onSuggestionPicked: (String) -> Unit,
     onOpenGridMenu: () -> Unit,
     onOpenVoiceInput: () -> Unit,
@@ -815,7 +843,7 @@ private fun TopHeaderBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Group Left: [iO + Menu] -> [Mic STT] -> [Emoji]
+        // Group Left (tetap): [iO + Menu] -> [Mic STT] -> [Emoji]
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Text "iO" & Grid Menu
             Row(
@@ -921,41 +949,80 @@ private fun TopHeaderBar(
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        // Group Right: Translate 🌐, Font Nickname 🎨, Clipboard 📋, Undo ↩
+        // Group Right: Single Door Toggle Button ("Tombol Pintu Buka Tutup")
+        // Triggers showing / hiding secondary tools (Terjemahan, Font Unik, Clipboard, Kembali/Undo)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(1.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
         ) {
-            IconButton(onClick = onOpenTranslate, modifier = Modifier.size(27.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Translate,
-                    contentDescription = "Terjemahan",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(15.dp)
-                )
+            AnimatedVisibility(
+                visible = isToolsOpen,
+                enter = expandHorizontally() + fadeIn(),
+                exit = shrinkHorizontally() + fadeOut()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onOpenTranslate,
+                        modifier = Modifier.size(27.dp).testTag("header_translate_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = "Terjemahan",
+                            tint = if (isTranslateMode) rgbTheme.primary else TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onOpenNicknameFont,
+                        modifier = Modifier.size(27.dp).testTag("header_nickname_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Font Nickname",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onQuickClipboard,
+                        modifier = Modifier.size(27.dp).testTag("header_clipboard_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Papan Klip",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onUndo,
+                        modifier = Modifier.size(27.dp).testTag("header_undo_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Undo,
+                            contentDescription = "Urungkan",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
-            IconButton(onClick = onOpenNicknameFont, modifier = Modifier.size(27.dp)) {
+
+            // Tombol Pintu Buka Tutup (Pemicu sembunyikan/tampilkan tombol peralatan sebelah kanan)
+            IconButton(
+                onClick = onToggleTools,
+                modifier = Modifier
+                    .size(28.dp)
+                    .testTag("tools_door_toggle_button")
+            ) {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = "Font Nickname",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            IconButton(onClick = onQuickClipboard, modifier = Modifier.size(27.dp)) {
-                Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = "Papan Klip",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            IconButton(onClick = onUndo, modifier = Modifier.size(27.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Undo,
-                    contentDescription = "Urungkan",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(15.dp)
+                    imageVector = if (isToolsOpen) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.MoreHoriz,
+                    contentDescription = if (isToolsOpen) "Tutup Menu Peralatan" else "Buka Menu Peralatan",
+                    tint = if (isToolsOpen) rgbTheme.primary else TextSecondary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

@@ -30,7 +30,8 @@ enum class ActivePanel {
     RESIZE,
     TRANSLATE,
     NICKNAME_FONT,
-    VOICE_INPUT
+    VOICE_INPUT,
+    SOUND_SETTINGS
 }
 
 enum class SoundEffectType(val id: String, val displayName: String) {
@@ -41,7 +42,7 @@ enum class SoundEffectType(val id: String, val displayName: String) {
 }
 
 enum class SpacebarStyle(val id: String, val displayLabel: String) {
-    DEFAULT("default", "spasi"),
+    DEFAULT("default", "␣"),
     BRANDED("branded", "Keyboard iO"),
     SYMBOL("symbol", "␣ Space"),
     NEON_BOLT("neon_bolt", "⚡ iO"),

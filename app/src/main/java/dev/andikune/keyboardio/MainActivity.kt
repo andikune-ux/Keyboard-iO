@@ -43,10 +43,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -98,6 +100,7 @@ import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.model.SoundEffectType
 import dev.andikune.keyboardio.model.SpacebarStyle
+import dev.andikune.keyboardio.service.KeyboardAudioFeedback
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
 import dev.andikune.keyboardio.ui.theme.CyberCard
@@ -675,7 +678,13 @@ private fun CustomizationTab(
     val swipeTyping by preferences.swipeTyping.collectAsState()
     val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
     val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
-    val longPressDelay by preferences.longPressDelay.collectAsState()
+    val context = LocalContext.current
+    val audioFeedback = remember { KeyboardAudioFeedback(context) }
+    DisposableEffect(Unit) {
+        onDispose {
+            audioFeedback.release()
+        }
+    }
 
     // Test text state for translator & nickname fonts showcase
     var sampleNickInput by remember { mutableStateOf("Sultan Pro") }
@@ -961,7 +970,12 @@ private fun CustomizationTab(
                         )
                         Switch(
                             checked = soundEnabled,
-                            onCheckedChange = { preferences.setSound(it) },
+                            onCheckedChange = {
+                                preferences.setSound(it)
+                                if (it) {
+                                    audioFeedback.playSound(soundType)
+                                }
+                            },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = rgbTheme.primary,
                                 checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
@@ -997,23 +1011,44 @@ private fun CustomizationTab(
                                             color = if (isSelected) rgbTheme.primary else Color.Transparent,
                                             shape = RoundedCornerShape(8.dp)
                                         )
-                                        .clickable { preferences.setSoundType(type) }
+                                        .clickable {
+                                            preferences.setSoundType(type)
+                                            audioFeedback.playSound(type)
+                                        }
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(
-                                        text = label,
-                                        color = if (isSelected) rgbTheme.primary else TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                    if (isSelected) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "Aktif",
-                                            color = rgbTheme.primary,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
+                                            text = label,
+                                            color = if (isSelected) rgbTheme.primary else TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "• Aktif",
+                                                color = rgbTheme.primary,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) rgbTheme.primary.copy(alpha = 0.2f) else CyberDarkSurface)
+                                            .clickable { audioFeedback.playSound(type) }
+                                            .padding(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Uji Suara",
+                                            tint = rgbTheme.primary,
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }

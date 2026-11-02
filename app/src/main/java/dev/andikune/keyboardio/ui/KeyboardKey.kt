@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SpaceBar
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -164,21 +167,54 @@ fun KeyboardKey(
             .testTag("key_${keyItem.primary}"),
         contentAlignment = Alignment.Center
     ) {
-        // Main primary label
-        Text(
-            text = keyItem.primary,
-            color = when {
-                keyItem.isActionKey && keyItem.primary == "↵" -> rgbTheme.primary
-                auroraIntensity > 0.3f -> NeonCyan
-                else -> TextPrimary
-            },
-            fontSize = when {
-                keyItem.primary.length > 3 -> 12.sp
-                keyItem.primary == "spasi" -> 12.sp
-                else -> 18.sp
-            },
-            fontWeight = if (keyItem.isActionKey) FontWeight.SemiBold else FontWeight.Medium
-        )
+        // Main primary label (Icon for spacebar, Text for other keys)
+        val isSpaceKey = keyItem.action is KeyAction.Space || keyItem.primary == "spasi" || keyItem.primary == "␣"
+        if (isSpaceKey && (keyItem.primary == "spasi" || keyItem.primary == "␣" || keyItem.primary.isEmpty())) {
+            Icon(
+                imageVector = Icons.Default.SpaceBar,
+                contentDescription = "Spasi",
+                tint = when {
+                    auroraIntensity > 0.3f -> NeonCyan
+                    isPressed -> rgbTheme.primary
+                    else -> TextSecondary
+                },
+                modifier = Modifier.size(24.dp)
+            )
+        } else if (isSpaceKey) {
+            // Custom branded spacebar with spacebar icon alongside text
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SpaceBar,
+                    contentDescription = null,
+                    tint = if (isPressed) rgbTheme.primary else TextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
+                Text(
+                    text = keyItem.primary,
+                    color = if (auroraIntensity > 0.3f) NeonCyan else TextPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else {
+            Text(
+                text = keyItem.primary,
+                color = when {
+                    keyItem.isActionKey && keyItem.primary == "↵" -> rgbTheme.primary
+                    auroraIntensity > 0.3f -> NeonCyan
+                    else -> TextPrimary
+                },
+                fontSize = when {
+                    keyItem.primary.length > 3 -> 12.sp
+                    else -> 18.sp
+                },
+                fontWeight = if (keyItem.isActionKey) FontWeight.SemiBold else FontWeight.Medium
+            )
+        }
 
         // Secondary character hint in upper right
         if (!keyItem.secondary.isNullOrEmpty()) {

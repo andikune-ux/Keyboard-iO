@@ -7,46 +7,66 @@ import dev.andikune.keyboardio.model.SoundEffectType
 
 class KeyboardAudioFeedback(context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-    private var toneGenerator: ToneGenerator? = null
+    private var toneGeneratorSystem: ToneGenerator? = null
+    private var toneGeneratorMusic: ToneGenerator? = null
 
     init {
         try {
-            toneGenerator = ToneGenerator(AudioManager.STREAM_SYSTEM, 60)
-        } catch (_: Exception) {
-        }
+            toneGeneratorSystem = ToneGenerator(AudioManager.STREAM_SYSTEM, 75)
+        } catch (_: Exception) {}
+        try {
+            toneGeneratorMusic = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
+        } catch (_: Exception) {}
     }
 
     fun playSound(soundType: SoundEffectType) {
         try {
             when (soundType) {
                 SoundEffectType.STANDARD -> {
-                    audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+                    audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK, 1.0f)
                 }
                 SoundEffectType.MECHANICAL -> {
-                    // Deep crisp feedback click
+                    // Tactile mechanical switch click
                     audioManager?.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, 1.0f)
+                    // Short low crisp thock tone for real mechanical feel
+                    val tone = toneGeneratorMusic ?: toneGeneratorSystem
+                    tone?.startTone(ToneGenerator.TONE_PROP_PROMPT, 18)
                 }
                 SoundEffectType.TYPEWRITER -> {
-                    // Classic sharp typewriter strike
+                    // Sharp typewriter keypress strike
                     audioManager?.playSoundEffect(AudioManager.FX_KEYPRESS_SPACEBAR, 1.0f)
+                    val tone = toneGeneratorMusic ?: toneGeneratorSystem
+                    tone?.startTone(ToneGenerator.TONE_PROP_ACK, 22)
                 }
                 SoundEffectType.DIGITAL_POP -> {
-                    // Futuristic digital pop tone
-                    toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 25)
+                    // Futuristic cyber pop bubble sound
+                    val tone = toneGeneratorMusic ?: toneGeneratorSystem
+                    tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 24)
                 }
             }
         } catch (_: Exception) {
-            // Fallback
+            fallbackClick()
+        }
+    }
+
+    private fun fallbackClick() {
+        try {
+            audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+        } catch (_: Exception) {
             try {
-                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+                (toneGeneratorMusic ?: toneGeneratorSystem)?.startTone(ToneGenerator.TONE_PROP_BEEP, 20)
             } catch (_: Exception) {}
         }
     }
 
     fun release() {
         try {
-            toneGenerator?.release()
-            toneGenerator = null
+            toneGeneratorSystem?.release()
+            toneGeneratorSystem = null
+        } catch (_: Exception) {}
+        try {
+            toneGeneratorMusic?.release()
+            toneGeneratorMusic = null
         } catch (_: Exception) {}
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
@@ -58,6 +59,7 @@ fun TranslateBar(
     onSwitchLanguage: () -> Unit,
     onClearText: () -> Unit,
     onInsertTranslation: (String) -> Unit,
+    onPasteFromClipboard: (() -> Unit)? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -192,6 +194,19 @@ fun TranslateBar(
                             imageVector = Icons.Default.Backspace,
                             contentDescription = "Hapus Teks",
                             tint = TextTertiary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                } else if (onPasteFromClipboard != null) {
+                    IconButton(
+                        onClick = onPasteFromClipboard,
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Tempel dari Clipboard",
+                            tint = rgbTheme.primary,
                             modifier = Modifier.size(15.dp)
                         )
                     }
