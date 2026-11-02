@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dev.andikune.keyboardio.model.AuroraWave
+import dev.andikune.keyboardio.model.KeyAction
 import dev.andikune.keyboardio.model.KeyItem
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.ui.theme.CyberBorder
@@ -72,7 +73,6 @@ fun KeyboardKey(
 ) {
     var isPressed by remember { mutableStateOf(false) }
 
-    // Aurora wave intensity for this specific key, driven by animated waveProgress (0f -> 1f)
     val auroraIntensity by remember(activeWave, waveProgress) {
         derivedStateOf {
             if (isAuroraEnabled && activeWave != null && waveProgress in 0.001f..0.999f) {
@@ -105,18 +105,9 @@ fun KeyboardKey(
 
     val neonBorderBrush = remember(isPressed, auroraIntensity, rgbTheme) {
         when {
-            isPressed -> Brush.horizontalGradient(
-                listOf(rgbTheme.primary, rgbTheme.secondary, rgbTheme.accent)
-            )
-            auroraIntensity > 0.1f -> Brush.horizontalGradient(
-                listOf(NeonCyan, NeonGreen, NeonMagenta)
-            )
-            else -> Brush.verticalGradient(
-                listOf(
-                    rgbTheme.primary.copy(alpha = 0.25f),
-                    CyberBorder.copy(alpha = 0.4f)
-                )
-            )
+            isPressed -> Brush.horizontalGradient(listOf(rgbTheme.primary, rgbTheme.secondary, rgbTheme.accent))
+            auroraIntensity > 0.1f -> Brush.horizontalGradient(listOf(NeonCyan, NeonGreen, NeonMagenta))
+            else -> Brush.verticalGradient(listOf(rgbTheme.primary.copy(alpha = 0.25f), CyberBorder.copy(alpha = 0.4f)))
         }
     }
 
@@ -156,18 +147,14 @@ fun KeyboardKey(
                     },
                     onTap = { onTap() },
                     onLongPress = {
-                        if (onLongPress != null) {
-                            onLongPress()
-                        } else if (!keyItem.secondary.isNullOrEmpty()) {
-                            onTap()
-                        }
+                        if (onLongPress != null) onLongPress()
+                        else if (!keyItem.secondary.isNullOrEmpty()) onTap()
                     }
                 )
             }
             .testTag("key_${keyItem.primary}"),
         contentAlignment = Alignment.Center
     ) {
-        // Main primary label (Icon for spacebar, Text for other keys)
         val isSpaceKey = keyItem.action is KeyAction.Space || keyItem.primary == "spasi" || keyItem.primary == "␣"
         if (isSpaceKey && (keyItem.primary == "spasi" || keyItem.primary == "␣" || keyItem.primary.isEmpty())) {
             Icon(
@@ -181,7 +168,6 @@ fun KeyboardKey(
                 modifier = Modifier.size(24.dp)
             )
         } else if (isSpaceKey) {
-            // Custom branded spacebar with spacebar icon alongside text
             androidx.compose.foundation.layout.Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
@@ -208,28 +194,21 @@ fun KeyboardKey(
                     auroraIntensity > 0.3f -> NeonCyan
                     else -> TextPrimary
                 },
-                fontSize = when {
-                    keyItem.primary.length > 3 -> 12.sp
-                    else -> 18.sp
-                },
+                fontSize = if (keyItem.primary.length > 3) 12.sp else 18.sp,
                 fontWeight = if (keyItem.isActionKey) FontWeight.SemiBold else FontWeight.Medium
             )
         }
 
-        // Secondary character hint in upper right
         if (!keyItem.secondary.isNullOrEmpty()) {
             Text(
                 text = keyItem.secondary,
                 color = if (isPressed) rgbTheme.secondary else TextTertiary,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 2.dp, end = 4.dp)
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 4.dp)
             )
         }
 
-        // Floating Key Pop-up Overlay (Efek Pop-up Mengambang)
         if (isPressed && isPopupEnabled && keyItem.primary.length <= 2 && !keyItem.isActionKey) {
             Box(
                 modifier = Modifier
