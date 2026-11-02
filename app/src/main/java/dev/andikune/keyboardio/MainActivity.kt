@@ -1,11 +1,16 @@
 package dev.andikune.keyboardio
 
+import android.app.AlertDialog
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -83,6 +88,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.andikune.keyboardio.data.ClipboardRepository
+import dev.andikune.keyboardio.data.CrashReportStore
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
@@ -137,6 +143,35 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+
+        showLastCrashReportIfPresent()
+    }
+
+    private fun showLastCrashReportIfPresent() {
+        val report = CrashReportStore(this).read() ?: return
+        window.decorView.post {
+            val textView = TextView(this).apply {
+                text = report
+                setTextIsSelectable(true)
+                setPadding(32, 0, 32, 0)
+            }
+            val scrollView = ScrollView(this).apply {
+                addView(textView)
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle("Crash terakhir terdeteksi")
+                .setMessage("Salin log ini lalu kirimkan untuk dianalisis. Teks juga dapat ditekan lama untuk memilih sebagian.")
+                .setView(scrollView)
+                .setPositiveButton("Salin log") { _, _ ->
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("Keyboard iO crash report", report))
+                    Toast.makeText(this, "Crash log sudah disalin", Toast.LENGTH_SHORT).show()
+                }
+                .setNeutralButton("Hapus log") { _, _ -> CrashReportStore(this).clear() }
+                .setNegativeButton("Tutup", null)
+                .show()
         }
     }
 }
