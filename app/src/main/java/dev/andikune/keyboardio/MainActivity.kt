@@ -225,6 +225,7 @@ fun MainScreen(
     val isFloating by preferences.isFloating.collectAsState()
     val hapticEnabled by preferences.hapticFeedback.collectAsState()
     val soundEnabled by preferences.keySound.collectAsState()
+    val longPressDelay by preferences.longPressDelay.collectAsState()
     val clipboardList by clipboardRepo.items.collectAsState()
 
     fun checkKeyboardStatus() {
@@ -366,7 +367,8 @@ fun MainScreen(
                     oneHandedMode = oneHandedMode,
                     isFloating = isFloating,
                     hapticEnabled = hapticEnabled,
-                    soundEnabled = soundEnabled
+                    soundEnabled = soundEnabled,
+                    longPressDelay = longPressDelay
                 )
                 2 -> ClipboardTab(
                     items = clipboardList,
@@ -665,7 +667,8 @@ private fun CustomizationTab(
     oneHandedMode: OneHandedMode,
     isFloating: Boolean,
     hapticEnabled: Boolean,
-    soundEnabled: Boolean
+    soundEnabled: Boolean,
+    longPressDelay: Long
 ) {
     LazyColumn(
         modifier = Modifier
@@ -749,6 +752,41 @@ private fun CustomizationTab(
                         value = heightScale,
                         onValueChange = { preferences.setHeightScale(it) },
                         valueRange = 0.75f..1.35f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = rgbTheme.primary,
+                            activeTrackColor = rgbTheme.primary,
+                            inactiveTrackColor = CyberKeyBg
+                        )
+                    )
+                }
+            }
+        }
+
+        // Long-Press delay adjustment
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Jeda Tahan Tombol (Long-Press): ${longPressDelay}ms",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Kecepatan munculnya karakter sekunder saat tombol huruf ditahan.",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Slider(
+                        value = longPressDelay.toFloat(),
+                        onValueChange = { preferences.setLongPressDelay(it.toLong()) },
+                        valueRange = 200f..600f,
                         colors = SliderDefaults.colors(
                             thumbColor = rgbTheme.primary,
                             activeTrackColor = rgbTheme.primary,

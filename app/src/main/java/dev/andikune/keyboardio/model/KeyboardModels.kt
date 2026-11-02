@@ -30,6 +30,21 @@ enum class ActivePanel {
     RESIZE
 }
 
+enum class EnterActionType(val displayLabel: String) {
+    RETURN("↵"),
+    SEARCH("🔍"),
+    SEND("➤"),
+    GO("➔"),
+    NEXT("⇥"),
+    DONE("✓")
+}
+
+data class KeyboardEditorState(
+    val isPassword: Boolean = false,
+    val isNumberOnly: Boolean = false,
+    val enterAction: EnterActionType = EnterActionType.RETURN
+)
+
 enum class RgbThemeStyle(
     val id: String,
     val displayName: String,

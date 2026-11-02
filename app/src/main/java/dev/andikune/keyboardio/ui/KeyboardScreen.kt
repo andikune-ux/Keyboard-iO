@@ -38,12 +38,14 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -56,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -64,29 +67,38 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.ActivePanel
 import dev.andikune.keyboardio.model.KeyAction
 import dev.andikune.keyboardio.model.KeyItem
+import dev.andikune.keyboardio.model.KeyboardEditorState
 import dev.andikune.keyboardio.model.KeyboardLayoutMode
 import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.OneHandedMode
+import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
 import dev.andikune.keyboardio.ui.theme.CyberCard
 import dev.andikune.keyboardio.ui.theme.CyberDarkSurface
+import dev.andikune.keyboardio.ui.theme.CyberKeyBg
+import dev.andikune.keyboardio.ui.theme.NeonGreen
 import dev.andikune.keyboardio.ui.theme.TextPrimary
 import dev.andikune.keyboardio.ui.theme.TextSecondary
 import dev.andikune.keyboardio.ui.theme.TextTertiary
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
 
 @Composable
 fun KeyboardScreen(
     preferences: KeyboardPreferences,
     clipboardRepo: ClipboardRepository,
+    editorStateFlow: StateFlow<KeyboardEditorState>,
+    composingWordFlow: StateFlow<String>,
     onKeyAction: (KeyAction) -> Unit,
     onSecondaryChar: (String) -> Unit,
     onPasteText: (String) -> Unit,
     onUndo: () -> Unit,
+    onSuggestionPicked: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val rgbTheme by preferences.theme.collectAsState()
@@ -94,9 +106,22 @@ fun KeyboardScreen(
     val oneHandedMode by preferences.oneHandedMode.collectAsState()
     val isFloating by preferences.isFloating.collectAsState()
     val clipboardItems by clipboardRepo.items.collectAsState()
+    val editorState by editorStateFlow.collectAsState()
+    val composingWord by composingWordFlow.collectAsState()
+
+    val suggestions = remember(composingWord, editorState.isPassword) {
+        if (editorState.isPassword) emptyList() else WordSuggester.getSuggestions(composingWord)
+    }
 
     var layoutMode by remember { mutableStateOf(KeyboardLayoutMode.QWERTY_LOWER) }
     var activePanel by remember { mutableStateOf(ActivePanel.NONE) }
+
+    // If input requires number only, switch layout automatically
+    LaunchedEffect(editorState.isNumberOnly) {
+        if (editorState.isNumberOnly) {
+            layoutMode = KeyboardLayoutMode.NUMBERS_SYMBOLS
+        }
+    }
 
     // Floating drag offset
     var floatingOffsetX by remember { mutableFloatStateOf(0f) }
@@ -129,6 +154,7 @@ fun KeyboardScreen(
     }
 
     val baseKeyHeight = 44.dp * heightScale
+    val enterLabel = editorState.enterAction.displayLabel
 
     val containerModifier = if (isFloating) {
         modifier
@@ -147,7 +173,7 @@ fun KeyboardScreen(
                 brush = Brush.verticalGradient(
                     listOf(rgbTheme.primary.copy(alpha = 0.5f), Color.Transparent)
                 ),
-                shape = androidx.compose.ui.graphics.RectangleShape
+                shape = RectangleShape
             )
     }
 
@@ -205,10 +231,12 @@ fun KeyboardScreen(
                 }
             }
 
-            // Top Quick Action Bar (Contains 4-dots Grid Menu Icon)
+            // Top Quick Action Bar / Word Suggestions Strip
             TopActionBar(
                 rgbTheme = rgbTheme,
-                neonBrush = neonRainbowBrush,
+                isPassword = editorState.isPassword,
+                suggestions = suggestions,
+                onSuggestionPicked = onSuggestionPicked,
                 onOpenGridMenu = {
                     activePanel = if (activePanel == ActivePanel.GRID_MENU) ActivePanel.NONE else ActivePanel.GRID_MENU
                 },
@@ -348,7 +376,7 @@ fun KeyboardScreen(
                                     onSecondaryClick = onSecondaryChar
                                 )
                                 KeyRow(
-                                    keys = KeyboardLayouts.getQwertyRow4(),
+                                    keys = KeyboardLayouts.getQwertyRow4(enterLabel),
                                     keyHeight = baseKeyHeight,
                                     rgbTheme = rgbTheme,
                                     onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
@@ -379,7 +407,7 @@ fun KeyboardScreen(
                                     onSecondaryClick = onSecondaryChar
                                 )
                                 KeyRow(
-                                    keys = KeyboardLayouts.getSymbolsRow4(),
+                                    keys = KeyboardLayouts.getSymbolsRow4(enterLabel),
                                     keyHeight = baseKeyHeight,
                                     rgbTheme = rgbTheme,
                                     onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
@@ -410,7 +438,7 @@ fun KeyboardScreen(
                                     onSecondaryClick = onSecondaryChar
                                 )
                                 KeyRow(
-                                    keys = KeyboardLayouts.getMoreSymbolsRow4(),
+                                    keys = KeyboardLayouts.getMoreSymbolsRow4(enterLabel),
                                     keyHeight = baseKeyHeight,
                                     rgbTheme = rgbTheme,
                                     onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
@@ -467,8 +495,10 @@ private fun handleKeyClick(
 
 @Composable
 private fun TopActionBar(
-    rgbTheme: dev.andikune.keyboardio.model.RgbThemeStyle,
-    neonBrush: Brush,
+    rgbTheme: RgbThemeStyle,
+    isPassword: Boolean,
+    suggestions: List<String>,
+    onSuggestionPicked: (String) -> Unit,
     onOpenGridMenu: () -> Unit,
     onQuickEmoji: () -> Unit,
     onQuickClipboard: () -> Unit,
@@ -508,42 +538,94 @@ private fun TopActionBar(
             )
         }
 
-        // Quick shortcut icon row
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onQuickEmoji, modifier = Modifier.size(30.dp)) {
+        // Center Area: Password Guard OR Word Suggestions OR Default Shortcut Icons
+        if (isPassword) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(CyberCard)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
                 Icon(
-                    imageVector = Icons.Default.SentimentSatisfiedAlt,
-                    contentDescription = "Emoji Cepat",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(18.dp)
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = NeonGreen,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Mode Sandi (Aman)",
+                    color = NeonGreen,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            IconButton(onClick = onQuickClipboard, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = "Papan Klip",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
+        } else if (suggestions.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                suggestions.forEach { word ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(CyberCard)
+                            .border(0.8.dp, rgbTheme.primary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable { onSuggestionPicked(word) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = word,
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
-            IconButton(onClick = onUndo, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Undo,
-                    contentDescription = "Urungkan",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            IconButton(onClick = onQuickResize, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = Icons.Default.FormatSize,
-                    contentDescription = "Ubah Ukuran",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
+        } else {
+            // Default quick shortcut icons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onQuickEmoji, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.SentimentSatisfiedAlt,
+                        contentDescription = "Emoji Cepat",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onQuickClipboard, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = "Papan Klip",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onUndo, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Undo,
+                        contentDescription = "Urungkan",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onQuickResize, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.FormatSize,
+                        contentDescription = "Ubah Ukuran",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -553,7 +635,7 @@ private fun TopActionBar(
 private fun KeyRow(
     keys: List<KeyItem>,
     keyHeight: androidx.compose.ui.unit.Dp,
-    rgbTheme: dev.andikune.keyboardio.model.RgbThemeStyle,
+    rgbTheme: RgbThemeStyle,
     isShiftActive: Boolean = false,
     onKeyClick: (KeyItem) -> Unit,
     onSecondaryClick: (String) -> Unit,
@@ -592,7 +674,7 @@ private fun KeyRow(
 
 @Composable
 private fun OneHandedSideBar(
-    rgbTheme: dev.andikune.keyboardio.model.RgbThemeStyle,
+    rgbTheme: RgbThemeStyle,
     isLeft: Boolean,
     onSwitchSide: () -> Unit,
     onExpand: () -> Unit,

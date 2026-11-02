@@ -1,5 +1,7 @@
 package dev.andikune.keyboardio
 
+import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import org.junit.Assert.assertEquals
@@ -44,6 +46,15 @@ class KeyboardUnitTest {
     }
 
     @Test
+    fun testDynamicEnterLabel() {
+        val row4Search = KeyboardLayouts.getQwertyRow4(EnterActionType.SEARCH.displayLabel)
+        assertEquals("🔍", row4Search[4].primary)
+
+        val row4Send = KeyboardLayouts.getQwertyRow4(EnterActionType.SEND.displayLabel)
+        assertEquals("➤", row4Send[4].primary)
+    }
+
+    @Test
     fun testSymbolsLayout() {
         val symRow1 = KeyboardLayouts.getSymbolsRow1()
         assertEquals(10, symRow1.size)
@@ -61,5 +72,15 @@ class KeyboardUnitTest {
         assertNotNull(rainbow)
         val cyberpunk = RgbThemeStyle.entries.find { it.id == "cyberpunk" }
         assertNotNull(cyberpunk)
+    }
+
+    @Test
+    fun testWordSuggester() {
+        val suggestions = WordSuggester.getSuggestions("kam")
+        assertTrue(suggestions.isNotEmpty())
+        assertTrue(suggestions.any { it.startsWith("kam", ignoreCase = true) })
+
+        val engSuggestions = WordSuggester.getSuggestions("hel")
+        assertTrue(engSuggestions.contains("hello"))
     }
 }

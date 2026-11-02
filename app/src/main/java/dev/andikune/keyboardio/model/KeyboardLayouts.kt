@@ -74,7 +74,7 @@ object KeyboardLayouts {
         return list
     }
 
-    fun getQwertyRow4(): List<KeyItem> {
+    fun getQwertyRow4(enterLabel: String = "↵"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "?123",
@@ -101,7 +101,7 @@ object KeyboardLayouts {
                 action = KeyAction.CommitText(".")
             ),
             KeyItem(
-                primary = "↵",
+                primary = enterLabel,
                 weight = 1.4f,
                 action = KeyAction.Enter,
                 isActionKey = true
@@ -145,7 +145,7 @@ object KeyboardLayouts {
         return list
     }
 
-    fun getSymbolsRow4(): List<KeyItem> {
+    fun getSymbolsRow4(enterLabel: String = "↵"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",
@@ -170,7 +170,7 @@ object KeyboardLayouts {
                 action = KeyAction.CommitText(",")
             ),
             KeyItem(
-                primary = "↵",
+                primary = enterLabel,
                 weight = 1.4f,
                 action = KeyAction.Enter,
                 isActionKey = true
@@ -214,7 +214,7 @@ object KeyboardLayouts {
         return list
     }
 
-    fun getMoreSymbolsRow4(): List<KeyItem> {
+    fun getMoreSymbolsRow4(enterLabel: String = "↵"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",
@@ -239,7 +239,7 @@ object KeyboardLayouts {
                 action = KeyAction.CommitText("…")
             ),
             KeyItem(
-                primary = "↵",
+                primary = enterLabel,
                 weight = 1.4f,
                 action = KeyAction.Enter,
                 isActionKey = true

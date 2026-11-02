@@ -9,13 +9,10 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.util.Log
-import android.view.ViewGroup
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
-import android.widget.FrameLayout
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
@@ -31,20 +28,19 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
+import dev.andikune.keyboardio.model.KeyboardEditorState
 import dev.andikune.keyboardio.ui.KeyboardScreen
 import dev.andikune.keyboardio.ui.theme.KeyboardIOTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Stack
 
 class KeyboardInputMethodService : InputMethodService(),
     LifecycleOwner,
     ViewModelStoreOwner,
     SavedStateRegistryOwner {
-
-    private companion object {
-        const val TAG = "KeyboardInputMethod"
-        const val MAX_UNDO_ENTRIES = 100
-    }
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val store = ViewModelStore()
@@ -58,6 +54,9 @@ class KeyboardInputMethodService : InputMethodService(),
         private set
     lateinit var clipboardRepo: ClipboardRepository
         private set
+
+    val editorState = MutableStateFlow(KeyboardEditorState())
+    val composingWord = MutableStateFlow("")
 
     private var audioManager: AudioManager? = null
     private var vibrator: Vibrator? = null
@@ -92,66 +91,73 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     override fun onCreateInputView(): View {
-        // ComposeView tidak cukup jika owner hanya dipasang pada dirinya sendiri:
-        // pada sebagian Android 12/OEM, WindowRecomposer mencari owner dari parent
-        // window root milik InputMethodService. Gunakan root container eksplisit.
-        installWindowTreeOwners()
-        return FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+        return ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@KeyboardInputMethodService)
             setViewTreeViewModelStoreOwner(this@KeyboardInputMethodService)
             setViewTreeSavedStateRegistryOwner(this@KeyboardInputMethodService)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
 
-            addView(ComposeView(this@KeyboardInputMethodService).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT
-                )
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-
-                setContent {
-                    KeyboardIOTheme {
-                        KeyboardScreen(
-                            preferences = preferences,
-                            clipboardRepo = clipboardRepo,
-                            onKeyAction = { handleKeyAction(it) },
-                            onSecondaryChar = { commitText(it) },
-                            onPasteText = { commitText(it) },
-                            onUndo = { performUndo() }
-                        )
-                    }
+            setContent {
+                KeyboardIOTheme {
+                    KeyboardScreen(
+                        preferences = preferences,
+                        clipboardRepo = clipboardRepo,
+                        editorStateFlow = editorState,
+                        composingWordFlow = composingWord,
+                        onKeyAction = { handleKeyAction(it) },
+                        onSecondaryChar = { commitText(it) },
+                        onPasteText = { commitText(it) },
+                        onUndo = { performUndo() },
+                        onSuggestionPicked = { word -> handleSuggestionPicked(word) }
+                    )
                 }
-            })
-        }
-    }
-
-    private fun installWindowTreeOwners() {
-        runCatching {
-            // InputMethodService membungkus input view ke dalam parentPanel milik
-            // Dialog. Owner pada decor root membuat lookup Compose menjangkau
-            // parentPanel tersebut, termasuk pada Android 12 vendor skin.
-            getWindow()?.window?.decorView?.let { decorView ->
-                decorView.setViewTreeLifecycleOwner(this)
-                decorView.setViewTreeViewModelStoreOwner(this)
-                decorView.setViewTreeSavedStateRegistryOwner(this)
             }
-        }.onFailure { exception ->
-            Log.e(TAG, "Gagal memasang lifecycle owners pada window IME", exception)
         }
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        moveLifecycleToResumed()
-        checkAndRecordClipboard()
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+
+        val inputType = info?.inputType ?: 0
+        val classType = inputType and InputType.TYPE_MASK_CLASS
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+
+        val isPassword = variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+                (classType == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+
+        val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE || classType == InputType.TYPE_CLASS_NUMBER
+
+        val imeAction = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+        val enterAction = when (imeAction) {
+            EditorInfo.IME_ACTION_SEARCH -> EnterActionType.SEARCH
+            EditorInfo.IME_ACTION_SEND -> EnterActionType.SEND
+            EditorInfo.IME_ACTION_GO -> EnterActionType.GO
+            EditorInfo.IME_ACTION_NEXT -> EnterActionType.NEXT
+            EditorInfo.IME_ACTION_DONE -> EnterActionType.DONE
+            else -> EnterActionType.RETURN
+        }
+
+        editorState.value = KeyboardEditorState(
+            isPassword = isPassword,
+            isNumberOnly = isNumberOnly,
+            enterAction = enterAction
+        )
+        composingWord.value = ""
+
+        if (!isPassword) {
+            checkAndRecordClipboard()
+        }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
-        moveLifecycleToCreated()
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        composingWord.value = ""
     }
 
     override fun onDestroy() {
@@ -164,6 +170,7 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun checkAndRecordClipboard() {
+        if (editorState.value.isPassword) return // Incognito protection
         try {
             val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val clip = clipboardManager?.primaryClip
@@ -179,40 +186,50 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun handleKeyAction(action: KeyAction) {
-        runCatching {
-            provideFeedback()
-            val ic = currentInputConnection ?: return@runCatching
+        provideFeedback()
+        val ic = currentInputConnection ?: return
 
-            when (action) {
-                is KeyAction.CommitText -> commitText(action.text)
-                is KeyAction.Backspace -> {
-                    val selected = ic.getSelectedText(0)
-                    if (selected.isNullOrEmpty()) {
-                        ic.deleteSurroundingText(1, 0)
-                    } else {
-                        ic.commitText("", 1)
-                    }
-                    if (undoStack.isNotEmpty()) undoStack.pop()
+        when (action) {
+            is KeyAction.CommitText -> {
+                commitText(action.text)
+            }
+            is KeyAction.Backspace -> {
+                val selected = ic.getSelectedText(0)
+                if (selected.isNullOrEmpty()) {
+                    ic.deleteSurroundingText(1, 0)
+                } else {
+                    ic.commitText("", 1)
                 }
-                is KeyAction.Space -> commitText(" ")
-                is KeyAction.Enter -> {
-                    val imeOptions = currentInputEditorInfo?.imeOptions ?: 0
-                    val actionId = imeOptions and EditorInfo.IME_MASK_ACTION
-                    if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
-                        ic.performEditorAction(actionId)
-                    } else {
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-                    }
+                if (undoStack.isNotEmpty()) {
+                    undoStack.pop()
                 }
-                is KeyAction.SwitchIme -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val curr = composingWord.value
+                if (curr.isNotEmpty()) {
+                    composingWord.value = curr.dropLast(1)
+                }
+            }
+            is KeyAction.Space -> {
+                commitText(" ")
+                composingWord.value = ""
+            }
+            is KeyAction.Enter -> {
+                val editorInfo = currentInputEditorInfo
+                val imeOptions = editorInfo?.imeOptions ?: 0
+                val actionId = imeOptions and EditorInfo.IME_MASK_ACTION
+                if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                    ic.performEditorAction(actionId)
+                } else {
+                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                }
+                composingWord.value = ""
+            }
+            is KeyAction.SwitchIme -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     switchToNextInputMethod(false)
                 }
-                else -> Unit
             }
-        }.onFailure { exception ->
-            // InputConnection dapat menjadi invalid ketika target app berganti fokus.
-            Log.e(TAG, "Operasi key action gagal: $action", exception)
+            else -> {}
         }
     }
 
@@ -220,8 +237,25 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
         ic.commitText(text, 1)
-        if (undoStack.size >= MAX_UNDO_ENTRIES) undoStack.removeAt(0)
         undoStack.push(text)
+
+        if (text.length == 1 && text[0].isLetter()) {
+            composingWord.value += text
+        } else {
+            composingWord.value = ""
+        }
+    }
+
+    private fun handleSuggestionPicked(word: String) {
+        provideFeedback()
+        val ic = currentInputConnection ?: return
+        val currentPrefixLen = composingWord.value.length
+        if (currentPrefixLen > 0) {
+            ic.deleteSurroundingText(currentPrefixLen, 0)
+        }
+        ic.commitText("$word ", 1)
+        undoStack.push("$word ")
+        composingWord.value = ""
     }
 
     private fun performUndo() {
@@ -231,9 +265,10 @@ class KeyboardInputMethodService : InputMethodService(),
             val last = undoStack.pop()
             ic.deleteSurroundingText(last.length, 0)
         } else {
-            // If no recorded stack, delete previous word
+            // Delete previous word
             ic.deleteSurroundingText(1, 0)
         }
+        composingWord.value = ""
     }
 
     private fun provideFeedback() {
@@ -254,40 +289,6 @@ class KeyboardInputMethodService : InputMethodService(),
                 audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
             } catch (_: Exception) {
             }
-        }
-    }
-
-    private fun moveLifecycleToResumed() {
-        runCatching {
-            when (lifecycleRegistry.currentState) {
-                Lifecycle.State.CREATED -> lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-                Lifecycle.State.STARTED -> Unit
-                Lifecycle.State.RESUMED -> Unit
-                else -> {
-                    lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-                    lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-                }
-            }
-            if (lifecycleRegistry.currentState == Lifecycle.State.STARTED) {
-                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-            }
-        }.onFailure { exception ->
-            Log.e(TAG, "Gagal memajukan lifecycle IME", exception)
-        }
-    }
-
-    private fun moveLifecycleToCreated() {
-        runCatching {
-            when (lifecycleRegistry.currentState) {
-                Lifecycle.State.RESUMED -> lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-                Lifecycle.State.STARTED -> Unit
-                else -> return@runCatching
-            }
-            if (lifecycleRegistry.currentState == Lifecycle.State.STARTED) {
-                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-            }
-        }.onFailure { exception ->
-            Log.e(TAG, "Gagal mengembalikan lifecycle IME ke CREATED", exception)
         }
     }
 }
