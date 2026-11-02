@@ -302,18 +302,15 @@ class KeyboardInputMethodService : InputMethodService(),
     private fun performSmartDeleteWord() {
         provideFeedback()
         val ic = currentInputConnection ?: return
-        val textBefore = ic.getTextBeforeCursor(60, 0)?.toString() ?: ""
-        if (textBefore.isEmpty()) return
+        val textBefore = ic.getTextBeforeCursor(250, 0)?.toString() ?: ""
+        if (textBefore.isEmpty()) {
+            ic.deleteSurroundingText(1, 0)
+            composingWord.value = ""
+            return
+        }
 
-        var i = textBefore.length - 1
-        while (i >= 0 && textBefore[i].isWhitespace()) {
-            i--
-        }
-        while (i >= 0 && !textBefore[i].isWhitespace()) {
-            i--
-        }
-        val charsToDelete = textBefore.length - (i + 1)
-        val count = if (charsToDelete > 0) charsToDelete else 1
+        val deleteCount = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(textBefore)
+        val count = if (deleteCount > 0) deleteCount else 1
         ic.deleteSurroundingText(count, 0)
         composingWord.value = ""
     }

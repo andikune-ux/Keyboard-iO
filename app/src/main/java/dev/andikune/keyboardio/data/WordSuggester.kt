@@ -62,7 +62,7 @@ object WordSuggester {
 
     fun getSuggestions(prefix: String, maxCount: Int = 3): List<String> {
         val trimmed = prefix.trim()
-        if (trimmed.isEmpty()) return listOf("saya", "terima", "halo")
+        if (trimmed.isEmpty()) return emptyList()
 
         val lowerPrefix = trimmed.lowercase(Locale.ROOT)
         val isFirstCapital = trimmed[0].isUpperCase()

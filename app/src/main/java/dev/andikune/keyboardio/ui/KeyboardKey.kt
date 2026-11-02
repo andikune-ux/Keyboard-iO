@@ -59,6 +59,7 @@ fun KeyboardKey(
     rgbTheme: RgbThemeStyle,
     isShiftActive: Boolean = false,
     activeWave: AuroraWave? = null,
+    waveProgress: Float = 0f,
     isAuroraEnabled: Boolean = true,
     isPopupEnabled: Boolean = true,
     modifier: Modifier = Modifier,
@@ -68,21 +69,20 @@ fun KeyboardKey(
 ) {
     var isPressed by remember { mutableStateOf(false) }
 
-    // Aurora wave intensity for this specific key
-    val auroraIntensity by remember(activeWave) {
+    // Aurora wave intensity for this specific key, driven by animated waveProgress (0f -> 1f)
+    val auroraIntensity by remember(activeWave, waveProgress) {
         derivedStateOf {
-            if (isAuroraEnabled && activeWave != null) {
+            if (isAuroraEnabled && activeWave != null && waveProgress in 0.001f..0.999f) {
                 val dx = (keyItem.col - activeWave.originCol).toFloat()
                 val dy = (keyItem.row - activeWave.originRow).toFloat()
                 val dist = sqrt(dx * dx + dy * dy)
-                val elapsed = System.currentTimeMillis() - activeWave.timestamp
-                if (elapsed in 0..450) {
-                    val waveRadius = elapsed / 65f
-                    val diff = abs(dist - waveRadius)
-                    if (diff < 1.4f) {
-                        val decay = (1f - elapsed / 450f).coerceIn(0f, 1f)
-                        (decay * (1.4f - diff) / 1.4f).coerceIn(0f, 1f)
-                    } else 0f
+                val currentRadius = waveProgress * 6.5f
+                val diff = abs(dist - currentRadius)
+                val waveWidth = 1.3f
+                if (diff < waveWidth) {
+                    val decay = 1f - waveProgress
+                    val profile = 1f - (diff / waveWidth)
+                    (decay * profile).coerceIn(0f, 1f)
                 } else 0f
             } else 0f
         }

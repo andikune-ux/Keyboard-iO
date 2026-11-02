@@ -1,6 +1,7 @@
 package dev.andikune.keyboardio.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,6 +12,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import dev.andikune.keyboardio.data.OfflineTranslator
+import dev.andikune.keyboardio.data.SmartDeleteEngine
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -136,13 +141,117 @@ fun KeyboardScreen(
     val rmsVolume by (voiceInputManager?.rmsVolume?.collectAsState() ?: remember { mutableFloatStateOf(0f) })
     val voiceErrorMessage by (voiceInputManager?.errorMessage?.collectAsState() ?: remember { mutableStateOf(null) })
 
-    val suggestions = remember(composingWord, editorState.isPassword) {
-        if (editorState.isPassword) emptyList() else WordSuggester.getSuggestions(composingWord)
+    var isTranslateMode by remember { mutableStateOf(false) }
+    var translateSourceText by remember { mutableStateOf("") }
+    var isIdToEn by remember { mutableStateOf(true) }
+
+    val translateResultText = remember(translateSourceText, isIdToEn) {
+        if (translateSourceText.isBlank()) ""
+        else OfflineTranslator.translate(translateSourceText, isIdToEn)
+    }
+
+    val currentWordForSuggestions = if (isTranslateMode) {
+        translateSourceText.substringAfterLast(' ')
+    } else {
+        composingWord
+    }
+
+    val suggestions = remember(currentWordForSuggestions, editorState.isPassword) {
+        if (editorState.isPassword || currentWordForSuggestions.trim().isEmpty()) {
+            emptyList()
+        } else {
+            WordSuggester.getSuggestions(currentWordForSuggestions)
+        }
     }
 
     var layoutMode by remember { mutableStateOf(KeyboardLayoutMode.QWERTY_LOWER) }
     var activePanel by remember { mutableStateOf(ActivePanel.NONE) }
     var activeWave by remember { mutableStateOf<AuroraWave?>(null) }
+    val waveAnim = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+
+    val effectiveKeyAction: (KeyAction) -> Unit = { action ->
+        if (isTranslateMode) {
+            when (action) {
+                is KeyAction.CommitText -> {
+                    translateSourceText += action.text
+                }
+                is KeyAction.Space -> {
+                    translateSourceText += " "
+                }
+                is KeyAction.Backspace -> {
+                    if (translateSourceText.isNotEmpty()) {
+                        translateSourceText = translateSourceText.dropLast(1)
+                    }
+                }
+                is KeyAction.SmartDeleteWord -> {
+                    val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
+                    translateSourceText = if (count > 0 && count <= translateSourceText.length) {
+                        translateSourceText.dropLast(count)
+                    } else ""
+                }
+                is KeyAction.Enter -> {
+                    if (translateResultText.isNotEmpty()) {
+                        onPasteText(translateResultText)
+                        translateSourceText = ""
+                    } else if (translateSourceText.isNotEmpty()) {
+                        onPasteText(translateSourceText)
+                        translateSourceText = ""
+                    }
+                }
+                else -> onKeyAction(action)
+            }
+        } else {
+            onKeyAction(action)
+        }
+    }
+
+    val effectiveSecondaryChar: (String) -> Unit = { char ->
+        if (isTranslateMode) {
+            translateSourceText += char
+        } else {
+            onSecondaryChar(char)
+        }
+    }
+
+    val effectiveSmartDelete: () -> Unit = {
+        if (isTranslateMode) {
+            val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
+            translateSourceText = if (count > 0 && count <= translateSourceText.length) {
+                translateSourceText.dropLast(count)
+            } else ""
+        } else {
+            onSmartDeleteWord()
+        }
+    }
+
+    val effectiveSuggestionPicked: (String) -> Unit = { word ->
+        if (isTranslateMode) {
+            val lastSpace = translateSourceText.lastIndexOf(' ')
+            translateSourceText = if (lastSpace >= 0) {
+                translateSourceText.substring(0, lastSpace + 1) + "$word "
+            } else {
+                "$word "
+            }
+        } else {
+            onSuggestionPicked(word)
+        }
+    }
+
+    fun onKeyTapped(key: KeyItem) {
+        if (isAuroraEnabled) {
+            coroutineScope.launch {
+                activeWave = AuroraWave(key.row, key.col)
+                waveAnim.snapTo(0f)
+                waveAnim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 380, easing = LinearEasing)
+                )
+                activeWave = null
+            }
+        }
+        handleKeyClick(key, layoutMode, effectiveKeyAction) { next -> layoutMode = next }
+    }
 
     // Swipe typing touch points
     val swipeTrail = remember { mutableStateListOf<Offset>() }
@@ -269,7 +378,7 @@ fun KeyboardScreen(
                 rgbTheme = rgbTheme,
                 isPassword = editorState.isPassword,
                 suggestions = suggestions,
-                onSuggestionPicked = onSuggestionPicked,
+                onSuggestionPicked = effectiveSuggestionPicked,
                 onOpenGridMenu = {
                     activePanel = if (activePanel == ActivePanel.GRID_MENU) ActivePanel.NONE else ActivePanel.GRID_MENU
                 },
@@ -286,7 +395,8 @@ fun KeyboardScreen(
                     activePanel = if (activePanel == ActivePanel.EMOJI) ActivePanel.NONE else ActivePanel.EMOJI
                 },
                 onOpenTranslate = {
-                    activePanel = if (activePanel == ActivePanel.TRANSLATE) ActivePanel.NONE else ActivePanel.TRANSLATE
+                    isTranslateMode = !isTranslateMode
+                    if (activePanel == ActivePanel.TRANSLATE) activePanel = ActivePanel.NONE
                 },
                 onOpenNicknameFont = {
                     activePanel = if (activePanel == ActivePanel.NICKNAME_FONT) ActivePanel.NONE else ActivePanel.NICKNAME_FONT
@@ -297,7 +407,27 @@ fun KeyboardScreen(
                 onUndo = onUndo
             )
 
-            // Panel Area (Grid Menu, Emoji, Clipboard, Resize, Translate, Nickname, Voice Input)
+            // In-Keyboard Translate Bar (Displayed directly above keyboard keys, Gboard style)
+            if (isTranslateMode) {
+                TranslateBar(
+                    rgbTheme = rgbTheme,
+                    sourceText = translateSourceText,
+                    translatedText = translateResultText,
+                    isIdToEn = isIdToEn,
+                    onSwitchLanguage = { isIdToEn = !isIdToEn },
+                    onClearText = { translateSourceText = "" },
+                    onInsertTranslation = { text ->
+                        onPasteText(text)
+                        translateSourceText = ""
+                    },
+                    onClose = {
+                        isTranslateMode = false
+                        translateSourceText = ""
+                    }
+                )
+            }
+
+            // Panel Area (Grid Menu, Emoji, Clipboard, Resize, Nickname, Voice Input)
             AnimatedVisibility(
                 visible = activePanel != ActivePanel.NONE,
                 enter = slideInVertically { it / 2 } + fadeIn(),
@@ -329,7 +459,10 @@ fun KeyboardScreen(
                                 activePanel = ActivePanel.NONE
                             },
                             onClipboardClick = { activePanel = ActivePanel.CLIPBOARD },
-                            onTranslateClick = { activePanel = ActivePanel.TRANSLATE },
+                            onTranslateClick = {
+                                isTranslateMode = true
+                                activePanel = ActivePanel.NONE
+                            },
                             onNicknameFontClick = { activePanel = ActivePanel.NICKNAME_FONT },
                             onVoiceInputClick = {
                                 activePanel = ActivePanel.VOICE_INPUT
@@ -371,13 +504,8 @@ fun KeyboardScreen(
                         )
                     }
                     ActivePanel.TRANSLATE -> {
-                        TranslatePanel(
-                            rgbTheme = rgbTheme,
-                            onInsertTranslation = { text ->
-                                onPasteText(text)
-                            },
-                            onClose = { activePanel = ActivePanel.NONE }
-                        )
+                        isTranslateMode = true
+                        activePanel = ActivePanel.NONE
                     }
                     ActivePanel.NICKNAME_FONT -> {
                         NicknameFontPanel(
@@ -441,169 +569,148 @@ fun KeyboardScreen(
                                 KeyboardLayoutMode.QWERTY_UPPER,
                                 KeyboardLayoutMode.CAPS_LOCK -> {
                                     val isUpper = layoutMode != KeyboardLayoutMode.QWERTY_LOWER
+                                    val currentWaveProgress = if (activeWave != null) waveAnim.value else 0f
                                     KeyRow(
                                         keys = KeyboardLayouts.getQwertyRow1(isUpper),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getQwertyRow2(isUpper),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getQwertyRow3(isUpper),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
                                         isShiftActive = isUpper,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar,
-                                        onSmartDeleteWord = onSmartDeleteWord
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar,
+                                        onSmartDeleteWord = effectiveSmartDelete
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getQwertyRow4(enterLabel, spaceLabel),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                 }
                                 KeyboardLayoutMode.NUMBERS_SYMBOLS -> {
+                                    val currentWaveProgress = if (activeWave != null) waveAnim.value else 0f
                                     KeyRow(
                                         keys = KeyboardLayouts.getSymbolsRow1(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getSymbolsRow2(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getSymbolsRow3(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar,
-                                        onSmartDeleteWord = onSmartDeleteWord
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar,
+                                        onSmartDeleteWord = effectiveSmartDelete
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getSymbolsRow4(enterLabel, spaceLabel),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                 }
                                 KeyboardLayoutMode.MORE_SYMBOLS -> {
+                                    val currentWaveProgress = if (activeWave != null) waveAnim.value else 0f
                                     KeyRow(
                                         keys = KeyboardLayouts.getMoreSymbolsRow1(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getMoreSymbolsRow2(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getMoreSymbolsRow3(),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar,
-                                        onSmartDeleteWord = onSmartDeleteWord
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar,
+                                        onSmartDeleteWord = effectiveSmartDelete
                                     )
                                     KeyRow(
                                         keys = KeyboardLayouts.getMoreSymbolsRow4(enterLabel, spaceLabel),
                                         keyHeight = baseKeyHeight,
                                         rgbTheme = rgbTheme,
                                         activeWave = activeWave,
+                                        waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
-                                        onKeyClick = { key ->
-                                            activeWave = AuroraWave(key.row, key.col)
-                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
-                                        },
-                                        onSecondaryClick = onSecondaryChar
+                                        onKeyClick = { onKeyTapped(it) },
+                                        onSecondaryClick = effectiveSecondaryChar
                                     )
                                 }
                             }
@@ -861,6 +968,7 @@ private fun KeyRow(
     keyHeight: androidx.compose.ui.unit.Dp,
     rgbTheme: RgbThemeStyle,
     activeWave: AuroraWave? = null,
+    waveProgress: Float = 0f,
     isAuroraEnabled: Boolean = true,
     isPopupEnabled: Boolean = true,
     isShiftActive: Boolean = false,
@@ -880,6 +988,7 @@ private fun KeyRow(
                 rgbTheme = rgbTheme,
                 isShiftActive = isShiftActive,
                 activeWave = activeWave,
+                waveProgress = waveProgress,
                 isAuroraEnabled = isAuroraEnabled,
                 isPopupEnabled = isPopupEnabled,
                 modifier = Modifier.weight(key.weight),

@@ -81,6 +81,13 @@ class KeyboardUnitTest {
 
     @Test
     fun testWordSuggesterAndAutoCorrection() {
+        // Suggestions must be EMPTY when prefix is empty (only appear when approximating active input)
+        val emptySuggestions = WordSuggester.getSuggestions("")
+        assertTrue(emptySuggestions.isEmpty())
+
+        val whitespaceSuggestions = WordSuggester.getSuggestions("   ")
+        assertTrue(whitespaceSuggestions.isEmpty())
+
         val suggestions = WordSuggester.getSuggestions("kam")
         assertTrue(suggestions.isNotEmpty())
         assertTrue(suggestions.any { it.startsWith("kam", ignoreCase = true) })
@@ -91,6 +98,39 @@ class KeyboardUnitTest {
         // Typo correction test: "sy" -> "saya" or "kmu" -> "kamu"
         val corrected = WordSuggester.findAutoCorrection("kmu")
         assertEquals("kamu", corrected)
+    }
+
+    @Test
+    fun testSmartDeleteEngineSentenceAndPunctuation() {
+        // 1. Sentence boundary (.!?)
+        val sentenceText = "Ini kalimat pertama. Ini kalimat kedua"
+        val countSentence = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(sentenceText)
+        assertEquals(" Ini kalimat kedua".length, countSentence)
+
+        // 2. Comma / clause boundary (,)
+        val commaText = "Halo kawan, apa kabar"
+        val countComma = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(commaText)
+        assertEquals(" apa kabar".length, countComma)
+
+        // 3. Newline boundary (\n)
+        val newlineText = "Baris satu\nBaris dua"
+        val countNewline = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(newlineText)
+        assertEquals("Baris dua".length, countNewline)
+
+        // 4. Cursor right on punctuation
+        val punctText = "Halo kawan,"
+        val countPunct = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(punctText)
+        assertEquals("kawan,".length, countPunct)
+
+        // 5. Cursor on newline
+        val justNewline = "Baris satu\n"
+        val countJustNewline = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(justNewline)
+        assertEquals(1, countJustNewline)
+
+        // 6. Plain word
+        val wordText = "Halo dunia"
+        val countWord = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(wordText)
+        assertEquals("dunia".length, countWord)
     }
 
     @Test
