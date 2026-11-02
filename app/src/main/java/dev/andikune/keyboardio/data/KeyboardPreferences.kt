@@ -2,8 +2,7 @@ package dev.andikune.keyboardio.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.compose.runtime.mutableLongStateOf
-import dev.andikune.keyboardio.longPressDelay
+import dev.andikune.keyboardio.longPressDelay as longPressDelayUi
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.model.SoundEffectType
@@ -62,7 +61,7 @@ class KeyboardPreferences(context: Context) {
     val keyPopupEffect: StateFlow<Boolean> = _keyPopupEffect.asStateFlow()
 
     init {
-        longPressDelay = _longPressDelay.value
+        longPressDelayUi = _longPressDelay.value
     }
 
     fun setTheme(theme: RgbThemeStyle) {
@@ -132,7 +131,7 @@ class KeyboardPreferences(context: Context) {
         val clamped = delayMs.coerceIn(200L, 700L)
         prefs.edit().putLong("long_press_delay", clamped).apply()
         _longPressDelay.value = clamped
-        longPressDelay = clamped
+        longPressDelayUi = clamped
     }
 
     private fun loadLongPressDelay(): Long = prefs.getLong("long_press_delay", 300L)
