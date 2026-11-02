@@ -12,6 +12,8 @@ import android.os.VibratorManager
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
 import android.view.inputmethod.EditorInfo
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -90,12 +92,28 @@ class KeyboardInputMethodService : InputMethodService(),
         checkAndRecordClipboard()
     }
 
+    override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
+        super.onConfigureWindow(win, isFullscreen, isCandidatesOnly)
+        setOwnersRecursively(win.decorView)
+    }
+
     override fun onCreateInputView(): View {
+        attachOwnersToWindow()
+
         return ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@KeyboardInputMethodService)
             setViewTreeViewModelStoreOwner(this@KeyboardInputMethodService)
             setViewTreeSavedStateRegistryOwner(this@KeyboardInputMethodService)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+
+            addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    attachOwnersToWindow()
+                    setOwnersRecursively(v.rootView)
+                    (v.parent as? View)?.let { setOwnersRecursively(it) }
+                }
+                override fun onViewDetachedFromWindow(v: View) {}
+            })
 
             setContent {
                 KeyboardIOTheme {
@@ -111,6 +129,25 @@ class KeyboardInputMethodService : InputMethodService(),
                         onSuggestionPicked = { word -> handleSuggestionPicked(word) }
                     )
                 }
+            }
+        }
+    }
+
+    private fun attachOwnersToWindow() {
+        runCatching {
+            val win = window?.window ?: return
+            setOwnersRecursively(win.decorView)
+        }
+    }
+
+    private fun setOwnersRecursively(view: View?) {
+        if (view == null) return
+        view.setViewTreeLifecycleOwner(this)
+        view.setViewTreeViewModelStoreOwner(this)
+        view.setViewTreeSavedStateRegistryOwner(this)
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                setOwnersRecursively(view.getChildAt(i))
             }
         }
     }
