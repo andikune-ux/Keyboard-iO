@@ -2,6 +2,7 @@ package dev.andikune.keyboardio.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import dev.andikune.keyboardio.model.ClipboardItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +11,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class ClipboardRepository(context: Context) {
+    private companion object {
+        const val TAG = "ClipboardRepository"
+        const val MAX_ITEMS = 30
+    }
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences("keyboard_io_clipboard", Context.MODE_PRIVATE)
 
@@ -48,7 +54,8 @@ class ClipboardRepository(context: Context) {
                 )
             }
             _items.value = list
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
+            Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()
         }
     }
@@ -80,7 +87,10 @@ class ClipboardRepository(context: Context) {
         }
         // Limit to 30 items max, keep pinned items
         val pinned = current.filter { it.isPinned }
-        val unpinned = current.filterNot { it.isPinned }.take(30 - pinned.size)
+        // Jangan pernah meneruskan nilai negatif ke take() jika data lama
+        // memiliki lebih dari MAX_ITEMS item pinned.
+        val unpinnedLimit = (MAX_ITEMS - pinned.size).coerceAtLeast(0)
+        val unpinned = current.filterNot { it.isPinned }.take(unpinnedLimit)
         val updated = pinned + unpinned
         _items.value = updated
         saveItems(updated)

@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -37,6 +38,11 @@ class KeyboardInputMethodService : InputMethodService(),
     LifecycleOwner,
     ViewModelStoreOwner,
     SavedStateRegistryOwner {
+
+    private companion object {
+        const val TAG = "KeyboardInputMethod"
+        const val MAX_UNDO_ENTRIES = 100
+    }
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val store = ViewModelStore()
@@ -107,15 +113,13 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        moveLifecycleToResumed()
         checkAndRecordClipboard()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        moveLifecycleToCreated()
     }
 
     override fun onDestroy() {
@@ -143,44 +147,40 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun handleKeyAction(action: KeyAction) {
-        provideFeedback()
-        val ic = currentInputConnection ?: return
+        runCatching {
+            provideFeedback()
+            val ic = currentInputConnection ?: return@runCatching
 
-        when (action) {
-            is KeyAction.CommitText -> {
-                commitText(action.text)
-            }
-            is KeyAction.Backspace -> {
-                val selected = ic.getSelectedText(0)
-                if (selected.isNullOrEmpty()) {
-                    ic.deleteSurroundingText(1, 0)
-                } else {
-                    ic.commitText("", 1)
+            when (action) {
+                is KeyAction.CommitText -> commitText(action.text)
+                is KeyAction.Backspace -> {
+                    val selected = ic.getSelectedText(0)
+                    if (selected.isNullOrEmpty()) {
+                        ic.deleteSurroundingText(1, 0)
+                    } else {
+                        ic.commitText("", 1)
+                    }
+                    if (undoStack.isNotEmpty()) undoStack.pop()
                 }
-                if (undoStack.isNotEmpty()) {
-                    undoStack.pop()
+                is KeyAction.Space -> commitText(" ")
+                is KeyAction.Enter -> {
+                    val imeOptions = currentInputEditorInfo?.imeOptions ?: 0
+                    val actionId = imeOptions and EditorInfo.IME_MASK_ACTION
+                    if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                        ic.performEditorAction(actionId)
+                    } else {
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                    }
                 }
-            }
-            is KeyAction.Space -> {
-                commitText(" ")
-            }
-            is KeyAction.Enter -> {
-                val editorInfo = currentInputEditorInfo
-                val imeOptions = editorInfo?.imeOptions ?: 0
-                val actionId = imeOptions and EditorInfo.IME_MASK_ACTION
-                if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
-                    ic.performEditorAction(actionId)
-                } else {
-                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                    ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-                }
-            }
-            is KeyAction.SwitchIme -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                is KeyAction.SwitchIme -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     switchToNextInputMethod(false)
                 }
+                else -> Unit
             }
-            else -> {}
+        }.onFailure { exception ->
+            // InputConnection dapat menjadi invalid ketika target app berganti fokus.
+            Log.e(TAG, "Operasi key action gagal: $action", exception)
         }
     }
 
@@ -188,6 +188,7 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
         ic.commitText(text, 1)
+        if (undoStack.size >= MAX_UNDO_ENTRIES) undoStack.removeAt(0)
         undoStack.push(text)
     }
 
@@ -221,6 +222,40 @@ class KeyboardInputMethodService : InputMethodService(),
                 audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
             } catch (_: Exception) {
             }
+        }
+    }
+
+    private fun moveLifecycleToResumed() {
+        runCatching {
+            when (lifecycleRegistry.currentState) {
+                Lifecycle.State.CREATED -> lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                Lifecycle.State.STARTED -> Unit
+                Lifecycle.State.RESUMED -> Unit
+                else -> {
+                    lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                    lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+                }
+            }
+            if (lifecycleRegistry.currentState == Lifecycle.State.STARTED) {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+            }
+        }.onFailure { exception ->
+            Log.e(TAG, "Gagal memajukan lifecycle IME", exception)
+        }
+    }
+
+    private fun moveLifecycleToCreated() {
+        runCatching {
+            when (lifecycleRegistry.currentState) {
+                Lifecycle.State.RESUMED -> lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+                Lifecycle.State.STARTED -> Unit
+                else -> return@runCatching
+            }
+            if (lifecycleRegistry.currentState == Lifecycle.State.STARTED) {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            }
+        }.onFailure { exception ->
+            Log.e(TAG, "Gagal mengembalikan lifecycle IME ke CREATED", exception)
         }
     }
 }

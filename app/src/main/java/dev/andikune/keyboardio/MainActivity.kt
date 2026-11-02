@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -100,6 +101,10 @@ import dev.andikune.keyboardio.ui.theme.TextTertiary
 
 class MainActivity : ComponentActivity() {
 
+    private companion object {
+        const val TAG = "MainActivity"
+    }
+
     private lateinit var preferences: KeyboardPreferences
     private lateinit var clipboardRepo: ClipboardRepository
 
@@ -116,12 +121,19 @@ class MainActivity : ComponentActivity() {
                     preferences = preferences,
                     clipboardRepo = clipboardRepo,
                     onOpenSettings = {
-                        val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
-                        startActivity(intent)
+                        runCatching {
+                            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+                        }.onFailure { exception ->
+                            Log.e(TAG, "Gagal membuka pengaturan input method", exception)
+                        }
                     },
                     onOpenPicker = {
-                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        imm?.showInputMethodPicker()
+                        runCatching {
+                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                            imm?.showInputMethodPicker()
+                        }.onFailure { exception ->
+                            Log.e(TAG, "Gagal membuka picker input method", exception)
+                        }
                     }
                 )
             }
@@ -154,17 +166,20 @@ fun MainScreen(
     val clipboardList by clipboardRepo.items.collectAsState()
 
     fun checkKeyboardStatus() {
-        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        if (imm != null) {
-            val enabledMethods = imm.enabledInputMethodList
+        runCatching {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                ?: return@runCatching
             val myPackage = context.packageName
-            isImeEnabled = enabledMethods.any { it.packageName == myPackage }
+            isImeEnabled = imm.enabledInputMethodList.any { it.packageName == myPackage }
 
             val currentDefault = Settings.Secure.getString(
                 context.contentResolver,
                 Settings.Secure.DEFAULT_INPUT_METHOD
             )
-            isImeSelected = currentDefault != null && currentDefault.contains(myPackage)
+            isImeSelected = currentDefault?.substringBefore('/') == myPackage
+        }.onFailure { exception ->
+            // Beberapa OEM dapat menolak query ini; layar tetap dapat digunakan.
+            Log.e("MainScreen", "Gagal membaca status Keyboard iO", exception)
         }
     }
 
