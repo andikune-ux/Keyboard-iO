@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -33,13 +35,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,9 +62,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +80,7 @@ import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.ActivePanel
+import dev.andikune.keyboardio.model.AuroraWave
 import dev.andikune.keyboardio.model.KeyAction
 import dev.andikune.keyboardio.model.KeyItem
 import dev.andikune.keyboardio.model.KeyboardEditorState
@@ -76,12 +88,14 @@ import dev.andikune.keyboardio.model.KeyboardLayoutMode
 import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
+import dev.andikune.keyboardio.service.VoiceInputManager
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
 import dev.andikune.keyboardio.ui.theme.CyberCard
 import dev.andikune.keyboardio.ui.theme.CyberDarkSurface
-import dev.andikune.keyboardio.ui.theme.CyberKeyBg
+import dev.andikune.keyboardio.ui.theme.NeonCyan
 import dev.andikune.keyboardio.ui.theme.NeonGreen
+import dev.andikune.keyboardio.ui.theme.NeonMagenta
 import dev.andikune.keyboardio.ui.theme.TextPrimary
 import dev.andikune.keyboardio.ui.theme.TextSecondary
 import dev.andikune.keyboardio.ui.theme.TextTertiary
@@ -94,10 +108,12 @@ fun KeyboardScreen(
     clipboardRepo: ClipboardRepository,
     editorStateFlow: StateFlow<KeyboardEditorState>,
     composingWordFlow: StateFlow<String>,
+    voiceInputManager: VoiceInputManager? = null,
     onKeyAction: (KeyAction) -> Unit,
     onSecondaryChar: (String) -> Unit,
     onPasteText: (String) -> Unit,
     onUndo: () -> Unit,
+    onSmartDeleteWord: () -> Unit,
     onSuggestionPicked: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -105,9 +121,20 @@ fun KeyboardScreen(
     val heightScale by preferences.heightScale.collectAsState()
     val oneHandedMode by preferences.oneHandedMode.collectAsState()
     val isFloating by preferences.isFloating.collectAsState()
+    val spacebarStyle by preferences.spacebarStyle.collectAsState()
+    val isAuroraEnabled by preferences.auroraWaveEffect.collectAsState()
+    val isPopupEnabled by preferences.keyPopupEffect.collectAsState()
+    val isSwipeTypingEnabled by preferences.swipeTyping.collectAsState()
+
     val clipboardItems by clipboardRepo.items.collectAsState()
     val editorState by editorStateFlow.collectAsState()
     val composingWord by composingWordFlow.collectAsState()
+
+    // Active voice recognition state if available
+    val isVoiceListening by (voiceInputManager?.isListening?.collectAsState() ?: remember { mutableStateOf(false) })
+    val liveSpokenText by (voiceInputManager?.liveSpokenText?.collectAsState() ?: remember { mutableStateOf("") })
+    val rmsVolume by (voiceInputManager?.rmsVolume?.collectAsState() ?: remember { mutableFloatStateOf(0f) })
+    val voiceErrorMessage by (voiceInputManager?.errorMessage?.collectAsState() ?: remember { mutableStateOf(null) })
 
     val suggestions = remember(composingWord, editorState.isPassword) {
         if (editorState.isPassword) emptyList() else WordSuggester.getSuggestions(composingWord)
@@ -115,6 +142,10 @@ fun KeyboardScreen(
 
     var layoutMode by remember { mutableStateOf(KeyboardLayoutMode.QWERTY_LOWER) }
     var activePanel by remember { mutableStateOf(ActivePanel.NONE) }
+    var activeWave by remember { mutableStateOf<AuroraWave?>(null) }
+
+    // Swipe typing touch points
+    val swipeTrail = remember { mutableStateListOf<Offset>() }
 
     // If input requires number only, switch layout automatically
     LaunchedEffect(editorState.isNumberOnly) {
@@ -155,6 +186,7 @@ fun KeyboardScreen(
 
     val baseKeyHeight = 44.dp * heightScale
     val enterLabel = editorState.enterAction.displayLabel
+    val spaceLabel = spacebarStyle.displayLabel
 
     val containerModifier = if (isFloating) {
         modifier
@@ -231,8 +263,9 @@ fun KeyboardScreen(
                 }
             }
 
-            // Top Quick Action Bar / Word Suggestions Strip
-            TopActionBar(
+            // Top Header Bar:
+            // "iO" + Grid Menu -> Speech to text mic -> Emoji icon -> Suggestions Strip -> Quick Action buttons
+            TopHeaderBar(
                 rgbTheme = rgbTheme,
                 isPassword = editorState.isPassword,
                 suggestions = suggestions,
@@ -240,19 +273,31 @@ fun KeyboardScreen(
                 onOpenGridMenu = {
                     activePanel = if (activePanel == ActivePanel.GRID_MENU) ActivePanel.NONE else ActivePanel.GRID_MENU
                 },
-                onQuickEmoji = {
+                onOpenVoiceInput = {
+                    if (activePanel == ActivePanel.VOICE_INPUT) {
+                        voiceInputManager?.stopListening()
+                        activePanel = ActivePanel.NONE
+                    } else {
+                        activePanel = ActivePanel.VOICE_INPUT
+                        voiceInputManager?.startListening()
+                    }
+                },
+                onOpenEmoji = {
                     activePanel = if (activePanel == ActivePanel.EMOJI) ActivePanel.NONE else ActivePanel.EMOJI
+                },
+                onOpenTranslate = {
+                    activePanel = if (activePanel == ActivePanel.TRANSLATE) ActivePanel.NONE else ActivePanel.TRANSLATE
+                },
+                onOpenNicknameFont = {
+                    activePanel = if (activePanel == ActivePanel.NICKNAME_FONT) ActivePanel.NONE else ActivePanel.NICKNAME_FONT
                 },
                 onQuickClipboard = {
                     activePanel = if (activePanel == ActivePanel.CLIPBOARD) ActivePanel.NONE else ActivePanel.CLIPBOARD
                 },
-                onUndo = onUndo,
-                onQuickResize = {
-                    activePanel = if (activePanel == ActivePanel.RESIZE) ActivePanel.NONE else ActivePanel.RESIZE
-                }
+                onUndo = onUndo
             )
 
-            // Panel Area (Grid Menu, Emoji, Clipboard, Resize)
+            // Panel Area (Grid Menu, Emoji, Clipboard, Resize, Translate, Nickname, Voice Input)
             AnimatedVisibility(
                 visible = activePanel != ActivePanel.NONE,
                 enter = slideInVertically { it / 2 } + fadeIn(),
@@ -284,6 +329,12 @@ fun KeyboardScreen(
                                 activePanel = ActivePanel.NONE
                             },
                             onClipboardClick = { activePanel = ActivePanel.CLIPBOARD },
+                            onTranslateClick = { activePanel = ActivePanel.TRANSLATE },
+                            onNicknameFontClick = { activePanel = ActivePanel.NICKNAME_FONT },
+                            onVoiceInputClick = {
+                                activePanel = ActivePanel.VOICE_INPUT
+                                voiceInputManager?.startListening()
+                            },
                             onCloseClick = { activePanel = ActivePanel.NONE }
                         )
                     }
@@ -319,145 +370,277 @@ fun KeyboardScreen(
                             onClose = { activePanel = ActivePanel.NONE }
                         )
                     }
+                    ActivePanel.TRANSLATE -> {
+                        TranslatePanel(
+                            rgbTheme = rgbTheme,
+                            onInsertTranslation = { text ->
+                                onPasteText(text)
+                            },
+                            onClose = { activePanel = ActivePanel.NONE }
+                        )
+                    }
+                    ActivePanel.NICKNAME_FONT -> {
+                        NicknameFontPanel(
+                            rgbTheme = rgbTheme,
+                            initialText = composingWord,
+                            onInsertText = { text ->
+                                onPasteText(text)
+                            },
+                            onClose = { activePanel = ActivePanel.NONE }
+                        )
+                    }
+                    ActivePanel.VOICE_INPUT -> {
+                        VoiceInputOverlay(
+                            isListening = isVoiceListening,
+                            liveSpokenText = liveSpokenText,
+                            rmsVolume = rmsVolume,
+                            errorMessage = voiceErrorMessage,
+                            rgbTheme = rgbTheme,
+                            onStopListening = {
+                                voiceInputManager?.stopListening()
+                                activePanel = ActivePanel.NONE
+                            },
+                            onClose = {
+                                voiceInputManager?.stopListening()
+                                activePanel = ActivePanel.NONE
+                            }
+                        )
+                    }
                     ActivePanel.NONE -> {}
                 }
             }
 
             // Keyboard Layout Row (Handles One-Handed Mode)
             if (activePanel == ActivePanel.NONE) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 2.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left sidebar in One-Handed Mode (when keyboard is pushed to the right)
-                    if (oneHandedMode == OneHandedMode.RIGHT) {
-                        OneHandedSideBar(
-                            rgbTheme = rgbTheme,
-                            isLeft = true,
-                            onSwitchSide = { preferences.setOneHandedMode(OneHandedMode.LEFT) },
-                            onExpand = { preferences.setOneHandedMode(OneHandedMode.OFF) },
-                            modifier = Modifier.width(54.dp)
-                        )
-                    }
-
-                    // Main Keyboard Area
-                    Column(
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 2.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        when (layoutMode) {
-                            KeyboardLayoutMode.QWERTY_LOWER,
-                            KeyboardLayoutMode.QWERTY_UPPER,
-                            KeyboardLayoutMode.CAPS_LOCK -> {
-                                val isUpper = layoutMode != KeyboardLayoutMode.QWERTY_LOWER
-                                KeyRow(
-                                    keys = KeyboardLayouts.getQwertyRow1(isUpper),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getQwertyRow2(isUpper),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getQwertyRow3(isUpper),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    isShiftActive = isUpper,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getQwertyRow4(enterLabel),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar,
-                                    onOpenEmoji = { activePanel = ActivePanel.EMOJI }
-                                )
+                        // Left sidebar in One-Handed Mode (when keyboard is pushed to the right)
+                        if (oneHandedMode == OneHandedMode.RIGHT) {
+                            OneHandedSideBar(
+                                rgbTheme = rgbTheme,
+                                isLeft = true,
+                                onSwitchSide = { preferences.setOneHandedMode(OneHandedMode.LEFT) },
+                                onExpand = { preferences.setOneHandedMode(OneHandedMode.OFF) },
+                                modifier = Modifier.width(54.dp)
+                            )
+                        }
+
+                        // Main Keyboard Key Rows
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 2.dp)
+                        ) {
+                            when (layoutMode) {
+                                KeyboardLayoutMode.QWERTY_LOWER,
+                                KeyboardLayoutMode.QWERTY_UPPER,
+                                KeyboardLayoutMode.CAPS_LOCK -> {
+                                    val isUpper = layoutMode != KeyboardLayoutMode.QWERTY_LOWER
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getQwertyRow1(isUpper),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getQwertyRow2(isUpper),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getQwertyRow3(isUpper),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        isShiftActive = isUpper,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar,
+                                        onSmartDeleteWord = onSmartDeleteWord
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getQwertyRow4(enterLabel, spaceLabel),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                }
+                                KeyboardLayoutMode.NUMBERS_SYMBOLS -> {
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getSymbolsRow1(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getSymbolsRow2(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getSymbolsRow3(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar,
+                                        onSmartDeleteWord = onSmartDeleteWord
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getSymbolsRow4(enterLabel, spaceLabel),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                }
+                                KeyboardLayoutMode.MORE_SYMBOLS -> {
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getMoreSymbolsRow1(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getMoreSymbolsRow2(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getMoreSymbolsRow3(),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar,
+                                        onSmartDeleteWord = onSmartDeleteWord
+                                    )
+                                    KeyRow(
+                                        keys = KeyboardLayouts.getMoreSymbolsRow4(enterLabel, spaceLabel),
+                                        keyHeight = baseKeyHeight,
+                                        rgbTheme = rgbTheme,
+                                        activeWave = activeWave,
+                                        isAuroraEnabled = isAuroraEnabled,
+                                        isPopupEnabled = isPopupEnabled,
+                                        onKeyClick = { key ->
+                                            activeWave = AuroraWave(key.row, key.col)
+                                            handleKeyClick(key, layoutMode, onKeyAction) { next -> layoutMode = next }
+                                        },
+                                        onSecondaryClick = onSecondaryChar
+                                    )
+                                }
                             }
-                            KeyboardLayoutMode.NUMBERS_SYMBOLS -> {
-                                KeyRow(
-                                    keys = KeyboardLayouts.getSymbolsRow1(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getSymbolsRow2(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getSymbolsRow3(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getSymbolsRow4(enterLabel),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar,
-                                    onOpenEmoji = { activePanel = ActivePanel.EMOJI }
-                                )
-                            }
-                            KeyboardLayoutMode.MORE_SYMBOLS -> {
-                                KeyRow(
-                                    keys = KeyboardLayouts.getMoreSymbolsRow1(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getMoreSymbolsRow2(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getMoreSymbolsRow3(),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar
-                                )
-                                KeyRow(
-                                    keys = KeyboardLayouts.getMoreSymbolsRow4(enterLabel),
-                                    keyHeight = baseKeyHeight,
-                                    rgbTheme = rgbTheme,
-                                    onKeyClick = { handleKeyClick(it, layoutMode, onKeyAction) { next -> layoutMode = next } },
-                                    onSecondaryClick = onSecondaryChar,
-                                    onOpenEmoji = { activePanel = ActivePanel.EMOJI }
-                                )
-                            }
+                        }
+
+                        // Right sidebar in One-Handed Mode (when keyboard is pushed to the left)
+                        if (oneHandedMode == OneHandedMode.LEFT) {
+                            OneHandedSideBar(
+                                rgbTheme = rgbTheme,
+                                isLeft = false,
+                                onSwitchSide = { preferences.setOneHandedMode(OneHandedMode.RIGHT) },
+                                onExpand = { preferences.setOneHandedMode(OneHandedMode.OFF) },
+                                modifier = Modifier.width(54.dp)
+                            )
                         }
                     }
 
-                    // Right sidebar in One-Handed Mode (when keyboard is pushed to the left)
-                    if (oneHandedMode == OneHandedMode.LEFT) {
-                        OneHandedSideBar(
-                            rgbTheme = rgbTheme,
-                            isLeft = false,
-                            onSwitchSide = { preferences.setOneHandedMode(OneHandedMode.RIGHT) },
-                            onExpand = { preferences.setOneHandedMode(OneHandedMode.OFF) },
-                            modifier = Modifier.width(54.dp)
-                        )
+                    // Swipe Typing Glowing Neon Trail Overlay
+                    if (isSwipeTypingEnabled && swipeTrail.size > 1) {
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            val path = Path()
+                            path.moveTo(swipeTrail.first().x, swipeTrail.first().y)
+                            for (i in 1 until swipeTrail.size) {
+                                path.lineTo(swipeTrail[i].x, swipeTrail[i].y)
+                            }
+                            drawPath(
+                                path = path,
+                                brush = Brush.linearGradient(
+                                    listOf(rgbTheme.primary, rgbTheme.secondary, NeonCyan)
+                                ),
+                                style = Stroke(
+                                    width = 6.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -493,71 +676,110 @@ private fun handleKeyClick(
     }
 }
 
+/**
+ * Top Header Bar matching user specifications:
+ * - Top Left: "iO" + Grid Menu icon
+ * - Beside it: Speech-to-Text Button (Input Suara / Dikte 🎤)
+ * - Beside Speech-to-Text: Main Emoji Icon (☺)
+ * - Middle: Word Suggestions Strip (Saran Pengetikan Cerdas)
+ * - Right: Translate 🌐, Font Nickname 🎨, Clipboard 📋, Undo ↩
+ */
 @Composable
-private fun TopActionBar(
+private fun TopHeaderBar(
     rgbTheme: RgbThemeStyle,
     isPassword: Boolean,
     suggestions: List<String>,
     onSuggestionPicked: (String) -> Unit,
     onOpenGridMenu: () -> Unit,
-    onQuickEmoji: () -> Unit,
+    onOpenVoiceInput: () -> Unit,
+    onOpenEmoji: () -> Unit,
+    onOpenTranslate: () -> Unit,
+    onOpenNicknameFont: () -> Unit,
     onQuickClipboard: () -> Unit,
-    onUndo: () -> Unit,
-    onQuickResize: () -> Unit
+    onUndo: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .height(40.dp)
             .background(CyberDarkSurface)
             .border(0.5.dp, CyberBorder)
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Required 4-dots Grid Icon at top corner
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onOpenGridMenu)
-                .padding(horizontal = 6.dp, vertical = 4.dp)
-                .testTag("grid_menu_button")
-        ) {
-            Icon(
-                imageVector = Icons.Default.Apps,
-                contentDescription = "Menu Grid 4 Titik",
-                tint = rgbTheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = " iO",
-                color = rgbTheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+        // Group Left: [iO + Menu] -> [Mic STT] -> [Emoji]
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Text "iO" & Grid Menu
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onOpenGridMenu)
+                    .padding(horizontal = 5.dp, vertical = 3.dp)
+                    .testTag("grid_menu_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Apps,
+                    contentDescription = "Menu Fitur",
+                    tint = rgbTheme.primary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Text(
+                    text = " iO",
+                    color = rgbTheme.primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Speech-to-Text / Voice Input Button (Tepat di samping teks iO)
+            IconButton(
+                onClick = onOpenVoiceInput,
+                modifier = Modifier.size(28.dp).testTag("speech_to_text_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Input Suara / Dikte",
+                    tint = NeonCyan,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+
+            // Main Emoji Icon (Samping tombol Speech-to-Text)
+            IconButton(
+                onClick = onOpenEmoji,
+                modifier = Modifier.size(28.dp).testTag("main_emoji_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SentimentSatisfiedAlt,
+                    contentDescription = "Ikon Emoji Utama",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
         }
 
-        // Center Area: Password Guard OR Word Suggestions OR Default Shortcut Icons
+        // Center Area: Password Guard OR Word Suggestions Strip (Saran Pengetikan Cerdas)
         if (isPassword) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(CyberCard)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
                     tint = NeonGreen,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(13.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(3.dp))
                 Text(
-                    text = "Mode Sandi (Aman)",
+                    text = "Sandi (Aman)",
                     color = NeonGreen,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -565,67 +787,69 @@ private fun TopActionBar(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                suggestions.forEach { word ->
+                suggestions.take(3).forEach { word ->
                     Box(
                         modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(CyberCard)
-                            .border(0.8.dp, rgbTheme.primary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                             .clickable { onSuggestionPicked(word) }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = word,
                             color = TextPrimary,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
         } else {
-            // Default quick shortcut icons
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onQuickEmoji, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.SentimentSatisfiedAlt,
-                        contentDescription = "Emoji Cepat",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onQuickClipboard, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.ContentPaste,
-                        contentDescription = "Papan Klip",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onUndo, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Undo,
-                        contentDescription = "Urungkan",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onQuickResize, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.FormatSize,
-                        contentDescription = "Ubah Ukuran",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        // Group Right: Translate 🌐, Font Nickname 🎨, Clipboard 📋, Undo ↩
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onOpenTranslate, modifier = Modifier.size(27.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Translate,
+                    contentDescription = "Terjemahan",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            IconButton(onClick = onOpenNicknameFont, modifier = Modifier.size(27.dp)) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = "Font Nickname",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            IconButton(onClick = onQuickClipboard, modifier = Modifier.size(27.dp)) {
+                Icon(
+                    imageVector = Icons.Default.ContentPaste,
+                    contentDescription = "Papan Klip",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            IconButton(onClick = onUndo, modifier = Modifier.size(27.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Undo,
+                    contentDescription = "Urungkan",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
             }
         }
     }
@@ -636,10 +860,13 @@ private fun KeyRow(
     keys: List<KeyItem>,
     keyHeight: androidx.compose.ui.unit.Dp,
     rgbTheme: RgbThemeStyle,
+    activeWave: AuroraWave? = null,
+    isAuroraEnabled: Boolean = true,
+    isPopupEnabled: Boolean = true,
     isShiftActive: Boolean = false,
     onKeyClick: (KeyItem) -> Unit,
     onSecondaryClick: (String) -> Unit,
-    onOpenEmoji: (() -> Unit)? = null
+    onSmartDeleteWord: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -652,19 +879,25 @@ private fun KeyRow(
                 height = keyHeight,
                 rgbTheme = rgbTheme,
                 isShiftActive = isShiftActive,
+                activeWave = activeWave,
+                isAuroraEnabled = isAuroraEnabled,
+                isPopupEnabled = isPopupEnabled,
                 modifier = Modifier.weight(key.weight),
                 onTap = {
-                    if (key.action is KeyAction.OpenEmoji && onOpenEmoji != null) {
-                        onOpenEmoji()
+                    onKeyClick(key)
+                },
+                onLongPress = {
+                    if (key.primary == "⌫" && onSmartDeleteWord != null) {
+                        onSmartDeleteWord()
+                    } else if (!key.secondary.isNullOrEmpty()) {
+                        onSecondaryClick(key.secondary)
                     } else {
                         onKeyClick(key)
                     }
                 },
-                onLongPress = {
-                    if (!key.secondary.isNullOrEmpty()) {
-                        onSecondaryClick(key.secondary)
-                    } else if (key.primary == "⌫") {
-                        onKeyClick(key)
+                onSwipeLeft = {
+                    if (key.primary == "⌫" && onSmartDeleteWord != null) {
+                        onSmartDeleteWord()
                     }
                 }
             )

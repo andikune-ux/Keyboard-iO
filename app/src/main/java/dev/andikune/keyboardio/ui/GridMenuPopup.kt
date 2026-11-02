@@ -19,11 +19,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ViewStream
 import androidx.compose.material3.Icon
@@ -66,6 +69,9 @@ fun GridMenuPopup(
     onEmojiClick: () -> Unit,
     onUndoClick: () -> Unit,
     onClipboardClick: () -> Unit,
+    onTranslateClick: () -> Unit,
+    onNicknameFontClick: () -> Unit,
+    onVoiceInputClick: () -> Unit,
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -73,43 +79,64 @@ fun GridMenuPopup(
         GridMenuItem(
             id = "resize",
             title = "Ubah Ukuran",
-            subtitle = "Atur tinggi keyboard",
+            subtitle = "Atur tinggi",
             icon = Icons.Default.FormatSize,
             color = rgbTheme.primary
         ),
         GridMenuItem(
             id = "one_handed",
             title = "Satu Tangan",
-            subtitle = if (isOneHandedActive) "Aktif (Kiri/Kanan)" else "Rapatkan keyboard",
+            subtitle = if (isOneHandedActive) "Aktif" else "Rapatkan",
             icon = Icons.Default.PanTool,
             color = rgbTheme.secondary
         ),
         GridMenuItem(
             id = "floating",
             title = "Mengambang",
-            subtitle = if (isFloatingActive) "Mode Mengambang Aktif" else "Pindah posisi bebas",
+            subtitle = if (isFloatingActive) "Aktif" else "Pindah bebas",
             icon = Icons.Default.ViewStream,
             color = rgbTheme.accent
         ),
         GridMenuItem(
             id = "emoji",
             title = "Emoji Cepat",
-            subtitle = "Buka panel emoji",
+            subtitle = "Panel emoji",
             icon = Icons.Default.SentimentSatisfiedAlt,
             color = rgbTheme.primary
         ),
         GridMenuItem(
             id = "undo",
-            title = "Urungkan (Undo)",
-            subtitle = "Hapus ketikan terakhir",
+            title = "Urungkan",
+            subtitle = "Hapus ketikan",
             icon = Icons.Default.Undo,
             color = rgbTheme.secondary
         ),
         GridMenuItem(
             id = "clipboard",
             title = "Papan Klip",
-            subtitle = "Riwayat & tempel teks",
+            subtitle = "Riwayat salin",
             icon = Icons.Default.ContentPaste,
+            color = rgbTheme.accent
+        ),
+        GridMenuItem(
+            id = "translate",
+            title = "Terjemahan",
+            subtitle = "Offline ID-EN",
+            icon = Icons.Default.Translate,
+            color = rgbTheme.primary
+        ),
+        GridMenuItem(
+            id = "nickname_font",
+            title = "Font Nickname",
+            subtitle = "Gaya teks unik",
+            icon = Icons.Default.AutoAwesome,
+            color = rgbTheme.secondary
+        ),
+        GridMenuItem(
+            id = "voice_input",
+            title = "Input Suara",
+            subtitle = "Dikte bicara",
+            icon = Icons.Default.Mic,
             color = rgbTheme.accent
         )
     )
@@ -141,7 +168,7 @@ fun GridMenuPopup(
                         .background(rgbTheme.primary)
                 )
                 Text(
-                    text = " Fitur Tambahan Keyboard iO",
+                    text = " Fitur Lengkap Keyboard iO",
                     color = TextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
@@ -160,13 +187,13 @@ fun GridMenuPopup(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Grid of 6 items
+        // Grid of 9 items
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(vertical = 4.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -182,6 +209,9 @@ fun GridMenuPopup(
                             "emoji" -> onEmojiClick()
                             "undo" -> onUndoClick()
                             "clipboard" -> onClipboardClick()
+                            "translate" -> onTranslateClick()
+                            "nickname_font" -> onNicknameFontClick()
+                            "voice_input" -> onVoiceInputClick()
                         }
                     }
                 )
@@ -196,21 +226,21 @@ private fun GridMenuCard(
     rgbTheme: RgbThemeStyle,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier = Modifier
             .clip(shape)
             .background(CyberCard)
             .border(0.8.dp, CyberBorder, shape)
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 8.dp)
+            .padding(vertical = 10.dp, horizontal = 6.dp)
             .testTag("menu_item_${item.id}"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(36.dp)
                 .clip(CircleShape)
                 .background(item.color.copy(alpha = 0.15f))
                 .border(1.dp, item.color.copy(alpha = 0.5f), CircleShape),
@@ -220,14 +250,14 @@ private fun GridMenuCard(
                 imageVector = item.icon,
                 contentDescription = item.title,
                 tint = item.color,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = item.title,
             color = TextPrimary,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )

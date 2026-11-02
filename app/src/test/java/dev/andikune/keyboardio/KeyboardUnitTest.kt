@@ -34,8 +34,13 @@ class KeyboardUnitTest {
         val row4 = KeyboardLayouts.getQwertyRow4()
         assertEquals(5, row4.size)
         assertEquals("?123", row4[0].primary)
+        assertEquals(",", row4[1].primary)
         assertEquals("spasi", row4[2].primary)
+        assertEquals(".", row4[3].primary)
         assertEquals("↵", row4[4].primary)
+        // Also test custom spacebar label
+        val row4Custom = KeyboardLayouts.getQwertyRow4(spacebarLabel = "Keyboard iO")
+        assertEquals("Keyboard iO", row4Custom[2].primary)
     }
 
     @Test
@@ -75,12 +80,36 @@ class KeyboardUnitTest {
     }
 
     @Test
-    fun testWordSuggester() {
+    fun testWordSuggesterAndAutoCorrection() {
         val suggestions = WordSuggester.getSuggestions("kam")
         assertTrue(suggestions.isNotEmpty())
         assertTrue(suggestions.any { it.startsWith("kam", ignoreCase = true) })
 
         val engSuggestions = WordSuggester.getSuggestions("hel")
         assertTrue(engSuggestions.contains("hello"))
+
+        // Typo correction test: "sy" -> "saya" or "kmu" -> "kamu"
+        val corrected = WordSuggester.findAutoCorrection("kmu")
+        assertEquals("kamu", corrected)
+    }
+
+    @Test
+    fun testOfflineTranslator() {
+        val translatedEn = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn("Selamat pagi")
+        assertTrue(translatedEn.equals("Good morning", ignoreCase = true))
+
+        val translatedId = dev.andikune.keyboardio.data.OfflineTranslator.translateEnToId("Thank you")
+        assertTrue(translatedId.equals("Terima kasih", ignoreCase = true))
+    }
+
+    @Test
+    fun testNicknameFontGenerator() {
+        val sample = "Andik"
+        val sultan = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gamer_wing")
+        assertTrue(sultan.contains("Andik"))
+
+        val gothic = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gothic")
+        assertNotNull(gothic)
+        assertTrue(gothic.isNotEmpty())
     }
 }

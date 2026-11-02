@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
+import dev.andikune.keyboardio.model.SoundEffectType
+import dev.andikune.keyboardio.model.SpacebarStyle
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,8 +32,32 @@ class KeyboardPreferences(context: Context) {
     private val _keySound = MutableStateFlow(loadSound())
     val keySound: StateFlow<Boolean> = _keySound.asStateFlow()
 
+    private val _soundType = MutableStateFlow(loadSoundType())
+    val soundType: StateFlow<SoundEffectType> = _soundType.asStateFlow()
+
     private val _longPressDelay = MutableStateFlow(loadLongPressDelay())
     val longPressDelay: StateFlow<Long> = _longPressDelay.asStateFlow()
+
+    private val _smartBackspace = MutableStateFlow(loadSmartBackspace())
+    val smartBackspace: StateFlow<Boolean> = _smartBackspace.asStateFlow()
+
+    private val _autoCapitalize = MutableStateFlow(loadAutoCapitalize())
+    val autoCapitalize: StateFlow<Boolean> = _autoCapitalize.asStateFlow()
+
+    private val _spacebarStyle = MutableStateFlow(loadSpacebarStyle())
+    val spacebarStyle: StateFlow<SpacebarStyle> = _spacebarStyle.asStateFlow()
+
+    private val _autoCorrection = MutableStateFlow(loadAutoCorrection())
+    val autoCorrection: StateFlow<Boolean> = _autoCorrection.asStateFlow()
+
+    private val _swipeTyping = MutableStateFlow(loadSwipeTyping())
+    val swipeTyping: StateFlow<Boolean> = _swipeTyping.asStateFlow()
+
+    private val _auroraWaveEffect = MutableStateFlow(loadAuroraWave())
+    val auroraWaveEffect: StateFlow<Boolean> = _auroraWaveEffect.asStateFlow()
+
+    private val _keyPopupEffect = MutableStateFlow(loadKeyPopup())
+    val keyPopupEffect: StateFlow<Boolean> = _keyPopupEffect.asStateFlow()
 
     fun setTheme(theme: RgbThemeStyle) {
         prefs.edit().putString("rgb_theme", theme.id).apply()
@@ -86,6 +112,16 @@ class KeyboardPreferences(context: Context) {
 
     private fun loadSound(): Boolean = prefs.getBoolean("key_sound", false)
 
+    fun setSoundType(type: SoundEffectType) {
+        prefs.edit().putString("sound_type", type.id).apply()
+        _soundType.value = type
+    }
+
+    private fun loadSoundType(): SoundEffectType {
+        val raw = prefs.getString("sound_type", SoundEffectType.MECHANICAL.id)
+        return SoundEffectType.entries.find { it.id == raw } ?: SoundEffectType.MECHANICAL
+    }
+
     fun setLongPressDelay(delayMs: Long) {
         val clamped = delayMs.coerceIn(200L, 700L)
         prefs.edit().putLong("long_press_delay", clamped).apply()
@@ -93,4 +129,56 @@ class KeyboardPreferences(context: Context) {
     }
 
     private fun loadLongPressDelay(): Long = prefs.getLong("long_press_delay", 300L)
+
+    fun setSmartBackspace(enabled: Boolean) {
+        prefs.edit().putBoolean("smart_backspace", enabled).apply()
+        _smartBackspace.value = enabled
+    }
+
+    private fun loadSmartBackspace(): Boolean = prefs.getBoolean("smart_backspace", true)
+
+    fun setAutoCapitalize(enabled: Boolean) {
+        prefs.edit().putBoolean("auto_capitalize", enabled).apply()
+        _autoCapitalize.value = enabled
+    }
+
+    private fun loadAutoCapitalize(): Boolean = prefs.getBoolean("auto_capitalize", true)
+
+    fun setSpacebarStyle(style: SpacebarStyle) {
+        prefs.edit().putString("spacebar_style", style.id).apply()
+        _spacebarStyle.value = style
+    }
+
+    private fun loadSpacebarStyle(): SpacebarStyle {
+        val raw = prefs.getString("spacebar_style", SpacebarStyle.DEFAULT.id)
+        return SpacebarStyle.entries.find { it.id == raw } ?: SpacebarStyle.DEFAULT
+    }
+
+    fun setAutoCorrection(enabled: Boolean) {
+        prefs.edit().putBoolean("auto_correction", enabled).apply()
+        _autoCorrection.value = enabled
+    }
+
+    private fun loadAutoCorrection(): Boolean = prefs.getBoolean("auto_correction", true)
+
+    fun setSwipeTyping(enabled: Boolean) {
+        prefs.edit().putBoolean("swipe_typing", enabled).apply()
+        _swipeTyping.value = enabled
+    }
+
+    private fun loadSwipeTyping(): Boolean = prefs.getBoolean("swipe_typing", true)
+
+    fun setAuroraWaveEffect(enabled: Boolean) {
+        prefs.edit().putBoolean("aurora_wave", enabled).apply()
+        _auroraWaveEffect.value = enabled
+    }
+
+    private fun loadAuroraWave(): Boolean = prefs.getBoolean("aurora_wave", true)
+
+    fun setKeyPopupEffect(enabled: Boolean) {
+        prefs.edit().putBoolean("key_popup", enabled).apply()
+        _keyPopupEffect.value = enabled
+    }
+
+    private fun loadKeyPopup(): Boolean = prefs.getBoolean("key_popup", true)
 }

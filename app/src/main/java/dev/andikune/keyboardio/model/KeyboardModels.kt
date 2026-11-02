@@ -27,7 +27,25 @@ enum class ActivePanel {
     GRID_MENU,
     EMOJI,
     CLIPBOARD,
-    RESIZE
+    RESIZE,
+    TRANSLATE,
+    NICKNAME_FONT,
+    VOICE_INPUT
+}
+
+enum class SoundEffectType(val id: String, val displayName: String) {
+    MECHANICAL("mechanical", "Mekanikal (Clicky)"),
+    TYPEWRITER("typewriter", "Mesin Tik Klasik"),
+    DIGITAL_POP("digital_pop", "Digital Pop (Bubble)"),
+    STANDARD("standard", "Standard Click")
+}
+
+enum class SpacebarStyle(val id: String, val displayLabel: String) {
+    DEFAULT("default", "spasi"),
+    BRANDED("branded", "Keyboard iO"),
+    SYMBOL("symbol", "␣ Space"),
+    NEON_BOLT("neon_bolt", "⚡ iO"),
+    NEON_RGB("neon_rgb", "⌨ Neon iO")
 }
 
 enum class EnterActionType(val displayLabel: String) {
@@ -62,6 +80,7 @@ enum class RgbThemeStyle(
 sealed class KeyAction {
     data class CommitText(val text: String) : KeyAction()
     object Backspace : KeyAction()
+    object SmartDeleteWord : KeyAction()
     object Enter : KeyAction()
     object Shift : KeyAction()
     object SwitchToSymbols : KeyAction()
@@ -71,6 +90,9 @@ sealed class KeyAction {
     object Space : KeyAction()
     object OpenEmoji : KeyAction()
     object OpenGridMenu : KeyAction()
+    object OpenVoiceInput : KeyAction()
+    object OpenTranslate : KeyAction()
+    object OpenNicknameFont : KeyAction()
     object SwitchIme : KeyAction()
 }
 
@@ -79,7 +101,22 @@ data class KeyItem(
     val secondary: String? = null,
     val weight: Float = 1f,
     val action: KeyAction = KeyAction.CommitText(primary),
-    val isActionKey: Boolean = false
+    val isActionKey: Boolean = false,
+    val row: Int = 0,
+    val col: Int = 0
+)
+
+data class AuroraWave(
+    val originRow: Int,
+    val originCol: Int,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class KeyPopupState(
+    val char: String = "",
+    val row: Int = 0,
+    val col: Int = 0,
+    val isVisible: Boolean = false
 )
 
 data class ClipboardItem(

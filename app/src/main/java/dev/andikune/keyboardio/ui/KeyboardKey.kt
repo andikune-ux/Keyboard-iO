@@ -1,17 +1,23 @@
 package dev.andikune.keyboardio.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,15 +34,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import dev.andikune.keyboardio.model.AuroraWave
 import dev.andikune.keyboardio.model.KeyItem
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.ui.theme.CyberBorder
+import dev.andikune.keyboardio.ui.theme.CyberCard
 import dev.andikune.keyboardio.ui.theme.CyberKeyBg
 import dev.andikune.keyboardio.ui.theme.CyberKeyPressed
 import dev.andikune.keyboardio.ui.theme.CyberKeySpecial
+import dev.andikune.keyboardio.ui.theme.NeonCyan
+import dev.andikune.keyboardio.ui.theme.NeonGreen
+import dev.andikune.keyboardio.ui.theme.NeonMagenta
 import dev.andikune.keyboardio.ui.theme.TextPrimary
 import dev.andikune.keyboardio.ui.theme.TextSecondary
 import dev.andikune.keyboardio.ui.theme.TextTertiary
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 @Composable
 fun KeyboardKey(
@@ -44,30 +58,57 @@ fun KeyboardKey(
     height: Dp,
     rgbTheme: RgbThemeStyle,
     isShiftActive: Boolean = false,
+    activeWave: AuroraWave? = null,
+    isAuroraEnabled: Boolean = true,
+    isPopupEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
-    onLongPress: (() -> Unit)? = null
+    onLongPress: (() -> Unit)? = null,
+    onSwipeLeft: (() -> Unit)? = null
 ) {
     var isPressed by remember { mutableStateOf(false) }
+
+    // Aurora wave intensity for this specific key
+    val auroraIntensity by remember(activeWave) {
+        derivedStateOf {
+            if (isAuroraEnabled && activeWave != null) {
+                val dx = (keyItem.col - activeWave.originCol).toFloat()
+                val dy = (keyItem.row - activeWave.originRow).toFloat()
+                val dist = sqrt(dx * dx + dy * dy)
+                val elapsed = System.currentTimeMillis() - activeWave.timestamp
+                if (elapsed in 0..450) {
+                    val waveRadius = elapsed / 65f
+                    val diff = abs(dist - waveRadius)
+                    if (diff < 1.4f) {
+                        val decay = (1f - elapsed / 450f).coerceIn(0f, 1f)
+                        (decay * (1.4f - diff) / 1.4f).coerceIn(0f, 1f)
+                    } else 0f
+                } else 0f
+            } else 0f
+        }
+    }
 
     val keyBackground by animateColorAsState(
         targetValue = when {
             isPressed -> CyberKeyPressed
+            auroraIntensity > 0.15f -> NeonCyan.copy(alpha = 0.25f * auroraIntensity)
             keyItem.isActionKey && isShiftActive && keyItem.primary == "⇧" -> rgbTheme.primary.copy(alpha = 0.35f)
             keyItem.isActionKey -> CyberKeySpecial
             else -> CyberKeyBg
         },
-        animationSpec = tween(durationMillis = 80),
+        animationSpec = tween(durationMillis = 70),
         label = "keyBg"
     )
 
-    val neonBorderBrush = remember(isPressed, rgbTheme) {
-        if (isPressed) {
-            Brush.horizontalGradient(
+    val neonBorderBrush = remember(isPressed, auroraIntensity, rgbTheme) {
+        when {
+            isPressed -> Brush.horizontalGradient(
                 listOf(rgbTheme.primary, rgbTheme.secondary, rgbTheme.accent)
             )
-        } else {
-            Brush.verticalGradient(
+            auroraIntensity > 0.1f -> Brush.horizontalGradient(
+                listOf(NeonCyan, NeonGreen, NeonMagenta)
+            )
+            else -> Brush.verticalGradient(
                 listOf(
                     rgbTheme.primary.copy(alpha = 0.25f),
                     CyberBorder.copy(alpha = 0.4f)
@@ -80,17 +121,26 @@ fun KeyboardKey(
 
     Box(
         modifier = modifier
+            .zIndex(if (isPressed) 15f else 0f)
             .padding(horizontal = 2.dp, vertical = 3.dp)
             .height(height)
             .shadow(
-                elevation = if (isPressed) 6.dp else 2.dp,
+                elevation = when {
+                    isPressed -> 8.dp
+                    auroraIntensity > 0.1f -> (5.dp * auroraIntensity)
+                    else -> 2.dp
+                },
                 shape = shape,
-                spotColor = if (isPressed) rgbTheme.primary else Color.Black
+                spotColor = if (isPressed) rgbTheme.primary else if (auroraIntensity > 0.1f) NeonCyan else Color.Black
             )
             .clip(shape)
             .background(keyBackground)
             .border(
-                width = if (isPressed) 1.5.dp else 0.8.dp,
+                width = when {
+                    isPressed -> 1.5.dp
+                    auroraIntensity > 0.1f -> 1.3.dp
+                    else -> 0.8.dp
+                },
                 brush = neonBorderBrush,
                 shape = shape
             )
@@ -117,11 +167,15 @@ fun KeyboardKey(
         // Main primary label
         Text(
             text = keyItem.primary,
-            color = if (keyItem.isActionKey && keyItem.primary == "↵") rgbTheme.primary else TextPrimary,
+            color = when {
+                keyItem.isActionKey && keyItem.primary == "↵" -> rgbTheme.primary
+                auroraIntensity > 0.3f -> NeonCyan
+                else -> TextPrimary
+            },
             fontSize = when {
-                keyItem.primary.length > 2 -> 13.sp
+                keyItem.primary.length > 3 -> 12.sp
                 keyItem.primary == "spasi" -> 12.sp
-                else -> 19.sp
+                else -> 18.sp
             },
             fontWeight = if (keyItem.isActionKey) FontWeight.SemiBold else FontWeight.Medium
         )
@@ -137,6 +191,32 @@ fun KeyboardKey(
                     .align(Alignment.TopEnd)
                     .padding(top = 2.dp, end = 4.dp)
             )
+        }
+
+        // Floating Key Pop-up Overlay (Efek Pop-up Mengambang)
+        if (isPressed && isPopupEnabled && keyItem.primary.length <= 2 && !keyItem.isActionKey) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-52).dp)
+                    .size(width = 50.dp, height = 48.dp)
+                    .shadow(12.dp, RoundedCornerShape(12.dp), spotColor = rgbTheme.primary)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CyberCard)
+                    .border(
+                        1.5.dp,
+                        Brush.horizontalGradient(listOf(rgbTheme.primary, rgbTheme.secondary)),
+                        RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = keyItem.primary,
+                    color = TextPrimary,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

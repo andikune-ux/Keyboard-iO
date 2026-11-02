@@ -9,11 +9,13 @@ object KeyboardLayouts {
             listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
         }
         val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-        return letters.mapIndexed { index, char ->
+        return letters.mapIndexed { col, char ->
             KeyItem(
                 primary = char,
-                secondary = digits.getOrNull(index),
-                action = KeyAction.CommitText(char)
+                secondary = digits.getOrNull(col),
+                action = KeyAction.CommitText(char),
+                row = 0,
+                col = col
             )
         }
     }
@@ -25,11 +27,13 @@ object KeyboardLayouts {
             listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
         }
         val symbols = listOf("@", "#", "$", "_", "&", "-", "+", "(", ")")
-        return letters.mapIndexed { index, char ->
+        return letters.mapIndexed { col, char ->
             KeyItem(
                 primary = char,
-                secondary = symbols.getOrNull(index),
-                action = KeyAction.CommitText(char)
+                secondary = symbols.getOrNull(col),
+                action = KeyAction.CommitText(char),
+                row = 1,
+                col = col
             )
         }
     }
@@ -47,18 +51,22 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⇧",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Shift,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = 0
             )
         )
         // Letter keys
-        letters.forEachIndexed { index, char ->
+        letters.forEachIndexed { idx, char ->
             list.add(
                 KeyItem(
                     primary = char,
-                    secondary = symbols.getOrNull(index),
-                    action = KeyAction.CommitText(char)
+                    secondary = symbols.getOrNull(idx),
+                    action = KeyAction.CommitText(char),
+                    row = 2,
+                    col = idx + 1
                 )
             )
         }
@@ -66,45 +74,64 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Backspace,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = letters.size + 1
             )
         )
         return list
     }
 
-    fun getQwertyRow4(enterLabel: String = "↵"): List<KeyItem> {
+    /**
+     * Bottom row for QWERTY:
+     * Per user requirement:
+     * - Tombol emoji di baris bawah dihilangkan sepenuhnya
+     * - Posisi bekas tombol emoji digantikan oleh Tombol Koma ( , )
+     * - Spacebar menggunakan spacebarLabel kustom
+     */
+    fun getQwertyRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "?123",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.SwitchToSymbols,
-                isActionKey = true
+                isActionKey = true,
+                row = 3,
+                col = 0
             ),
             KeyItem(
-                primary = "☺",
-                weight = 1f,
-                action = KeyAction.OpenEmoji,
-                isActionKey = true
+                primary = ",",
+                secondary = ";",
+                weight = 1.0f,
+                action = KeyAction.CommitText(","),
+                row = 3,
+                col = 1
             ),
             KeyItem(
-                primary = "spasi",
+                primary = spacebarLabel,
                 secondary = null,
-                weight = 4.2f,
-                action = KeyAction.Space
+                weight = 4.4f,
+                action = KeyAction.Space,
+                row = 3,
+                col = 2
             ),
             KeyItem(
                 primary = ".",
-                secondary = ",",
-                weight = 1f,
-                action = KeyAction.CommitText(".")
+                secondary = "?",
+                weight = 1.0f,
+                action = KeyAction.CommitText("."),
+                row = 3,
+                col = 3
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Enter,
-                isActionKey = true
+                isActionKey = true,
+                row = 3,
+                col = 4
             )
         )
     }
@@ -112,12 +139,16 @@ object KeyboardLayouts {
     // Number & Symbols layout
     fun getSymbolsRow1(): List<KeyItem> {
         val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-        return keys.map { KeyItem(primary = it, action = KeyAction.CommitText(it)) }
+        return keys.mapIndexed { col, it ->
+            KeyItem(primary = it, action = KeyAction.CommitText(it), row = 0, col = col)
+        }
     }
 
     fun getSymbolsRow2(): List<KeyItem> {
         val keys = listOf("@", "#", "$", "_", "&", "-", "+", "(", ")", "/")
-        return keys.map { KeyItem(primary = it, action = KeyAction.CommitText(it)) }
+        return keys.mapIndexed { col, it ->
+            KeyItem(primary = it, action = KeyAction.CommitText(it), row = 1, col = col)
+        }
     }
 
     fun getSymbolsRow3(): List<KeyItem> {
@@ -125,55 +156,68 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "=\\<",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.SwitchToMoreSymbols,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = 0
             )
         )
         val symbols = listOf("*", "\"", "'", ":", ";", "!", "?")
-        symbols.forEach {
-            list.add(KeyItem(primary = it, action = KeyAction.CommitText(it)))
+        symbols.forEachIndexed { idx, it ->
+            list.add(KeyItem(primary = it, action = KeyAction.CommitText(it), row = 2, col = idx + 1))
         }
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Backspace,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = symbols.size + 1
             )
         )
         return list
     }
 
-    fun getSymbolsRow4(enterLabel: String = "↵"): List<KeyItem> {
+    fun getSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.SwitchToLetters,
-                isActionKey = true
-            ),
-            KeyItem(
-                primary = "☺",
-                weight = 1f,
-                action = KeyAction.OpenEmoji,
-                isActionKey = true
-            ),
-            KeyItem(
-                primary = "spasi",
-                weight = 4.2f,
-                action = KeyAction.Space
+                isActionKey = true,
+                row = 3,
+                col = 0
             ),
             KeyItem(
                 primary = ",",
-                weight = 1f,
-                action = KeyAction.CommitText(",")
+                weight = 1.0f,
+                action = KeyAction.CommitText(","),
+                row = 3,
+                col = 1
+            ),
+            KeyItem(
+                primary = spacebarLabel,
+                weight = 4.4f,
+                action = KeyAction.Space,
+                row = 3,
+                col = 2
+            ),
+            KeyItem(
+                primary = ".",
+                weight = 1.0f,
+                action = KeyAction.CommitText("."),
+                row = 3,
+                col = 3
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Enter,
-                isActionKey = true
+                isActionKey = true,
+                row = 3,
+                col = 4
             )
         )
     }
@@ -181,12 +225,16 @@ object KeyboardLayouts {
     // More symbols layout
     fun getMoreSymbolsRow1(): List<KeyItem> {
         val keys = listOf("~", "`", "|", "•", "√", "π", "÷", "×", "¶", "∆")
-        return keys.map { KeyItem(primary = it, action = KeyAction.CommitText(it)) }
+        return keys.mapIndexed { col, it ->
+            KeyItem(primary = it, action = KeyAction.CommitText(it), row = 0, col = col)
+        }
     }
 
     fun getMoreSymbolsRow2(): List<KeyItem> {
         val keys = listOf("£", "¢", "€", "¥", "^", "°", "=", "{", "}", "\\")
-        return keys.map { KeyItem(primary = it, action = KeyAction.CommitText(it)) }
+        return keys.mapIndexed { col, it ->
+            KeyItem(primary = it, action = KeyAction.CommitText(it), row = 1, col = col)
+        }
     }
 
     fun getMoreSymbolsRow3(): List<KeyItem> {
@@ -194,55 +242,68 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "?123",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.SwitchToSymbols,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = 0
             )
         )
         val symbols = listOf("%", "©", "®", "™", "[", "]", "<", ">")
-        symbols.forEach {
-            list.add(KeyItem(primary = it, action = KeyAction.CommitText(it)))
+        symbols.forEachIndexed { idx, it ->
+            list.add(KeyItem(primary = it, action = KeyAction.CommitText(it), row = 2, col = idx + 1))
         }
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Backspace,
-                isActionKey = true
+                isActionKey = true,
+                row = 2,
+                col = symbols.size + 1
             )
         )
         return list
     }
 
-    fun getMoreSymbolsRow4(enterLabel: String = "↵"): List<KeyItem> {
+    fun getMoreSymbolsRow4(enterLabel: String = "↵", spacebarLabel: String = "spasi"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "ABC",
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.SwitchToLetters,
-                isActionKey = true
+                isActionKey = true,
+                row = 3,
+                col = 0
             ),
             KeyItem(
-                primary = "☺",
-                weight = 1f,
-                action = KeyAction.OpenEmoji,
-                isActionKey = true
+                primary = ",",
+                weight = 1.0f,
+                action = KeyAction.CommitText(","),
+                row = 3,
+                col = 1
             ),
             KeyItem(
-                primary = "spasi",
-                weight = 4.2f,
-                action = KeyAction.Space
+                primary = spacebarLabel,
+                weight = 4.4f,
+                action = KeyAction.Space,
+                row = 3,
+                col = 2
             ),
             KeyItem(
                 primary = "…",
-                weight = 1f,
-                action = KeyAction.CommitText("…")
+                weight = 1.0f,
+                action = KeyAction.CommitText("…"),
+                row = 3,
+                col = 3
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.4f,
+                weight = 1.3f,
                 action = KeyAction.Enter,
-                isActionKey = true
+                isActionKey = true,
+                row = 3,
+                col = 4
             )
         )
     }

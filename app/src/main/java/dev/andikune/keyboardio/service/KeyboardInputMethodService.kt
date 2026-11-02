@@ -63,6 +63,9 @@ class KeyboardInputMethodService : InputMethodService(),
     private var audioManager: AudioManager? = null
     private var vibrator: Vibrator? = null
 
+    private var audioFeedback: KeyboardAudioFeedback? = null
+    private var voiceInputManager: VoiceInputManager? = null
+
     // Undo history stack
     private val undoStack = Stack<String>()
 
@@ -78,6 +81,10 @@ class KeyboardInputMethodService : InputMethodService(),
         preferences = KeyboardPreferences(applicationContext)
         clipboardRepo = ClipboardRepository(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        audioFeedback = KeyboardAudioFeedback(applicationContext)
+        voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
+            commitText("$spokenText ")
+        }
 
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -122,10 +129,12 @@ class KeyboardInputMethodService : InputMethodService(),
                         clipboardRepo = clipboardRepo,
                         editorStateFlow = editorState,
                         composingWordFlow = composingWord,
+                        voiceInputManager = voiceInputManager,
                         onKeyAction = { handleKeyAction(it) },
                         onSecondaryChar = { commitText(it) },
                         onPasteText = { commitText(it) },
                         onUndo = { performUndo() },
+                        onSmartDeleteWord = { performSmartDeleteWord() },
                         onSuggestionPicked = { word -> handleSuggestionPicked(word) }
                     )
                 }
@@ -201,6 +210,11 @@ class KeyboardInputMethodService : InputMethodService(),
         val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboardManager?.removePrimaryClipChangedListener(clipboardListener)
 
+        audioFeedback?.release()
+        audioFeedback = null
+        voiceInputManager?.destroy()
+        voiceInputManager = null
+
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         store.clear()
         super.onDestroy()
@@ -245,7 +259,22 @@ class KeyboardInputMethodService : InputMethodService(),
                     composingWord.value = curr.dropLast(1)
                 }
             }
+            is KeyAction.SmartDeleteWord -> {
+                performSmartDeleteWord()
+            }
             is KeyAction.Space -> {
+                val currentWord = composingWord.value
+                if (preferences.autoCorrection.value && currentWord.length >= 2) {
+                    val autoFixed = WordSuggester.findAutoCorrection(currentWord)
+                    if (autoFixed != null && autoFixed.isNotEmpty()) {
+                        // Replace current typo with corrected word
+                        ic.deleteSurroundingText(currentWord.length, 0)
+                        ic.commitText("$autoFixed ", 1)
+                        undoStack.push("$autoFixed ")
+                        composingWord.value = ""
+                        return
+                    }
+                }
                 commitText(" ")
                 composingWord.value = ""
             }
@@ -270,14 +299,54 @@ class KeyboardInputMethodService : InputMethodService(),
         }
     }
 
+    private fun performSmartDeleteWord() {
+        provideFeedback()
+        val ic = currentInputConnection ?: return
+        val textBefore = ic.getTextBeforeCursor(60, 0)?.toString() ?: ""
+        if (textBefore.isEmpty()) return
+
+        var i = textBefore.length - 1
+        while (i >= 0 && textBefore[i].isWhitespace()) {
+            i--
+        }
+        while (i >= 0 && !textBefore[i].isWhitespace()) {
+            i--
+        }
+        val charsToDelete = textBefore.length - (i + 1)
+        val count = if (charsToDelete > 0) charsToDelete else 1
+        ic.deleteSurroundingText(count, 0)
+        composingWord.value = ""
+    }
+
     private fun commitText(text: String) {
         provideFeedback()
         val ic = currentInputConnection ?: return
-        ic.commitText(text, 1)
-        undoStack.push(text)
 
-        if (text.length == 1 && text[0].isLetter()) {
-            composingWord.value += text
+        var toCommit = text
+        // Smart Auto-Capitalization: Capitalize start of sentence if enabled
+        if (preferences.autoCapitalize.value &&
+            text.length == 1 &&
+            text[0].isLetter() &&
+            composingWord.value.isEmpty()
+        ) {
+            val before = ic.getTextBeforeCursor(2, 0)?.toString()
+            val shouldCapitalize = before.isNullOrEmpty() ||
+                    before.endsWith(". ") ||
+                    before.endsWith("? ") ||
+                    before.endsWith("! ") ||
+                    before.endsWith("\n") ||
+                    before == "." ||
+                    before == "\n"
+            if (shouldCapitalize) {
+                toCommit = text.uppercase()
+            }
+        }
+
+        ic.commitText(toCommit, 1)
+        undoStack.push(toCommit)
+
+        if (toCommit.length == 1 && toCommit[0].isLetter()) {
+            composingWord.value += toCommit
         } else {
             composingWord.value = ""
         }
@@ -302,7 +371,6 @@ class KeyboardInputMethodService : InputMethodService(),
             val last = undoStack.pop()
             ic.deleteSurroundingText(last.length, 0)
         } else {
-            // Delete previous word
             ic.deleteSurroundingText(1, 0)
         }
         composingWord.value = ""
@@ -322,10 +390,7 @@ class KeyboardInputMethodService : InputMethodService(),
         }
 
         if (preferences.keySound.value) {
-            try {
-                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
-            } catch (_: Exception) {
-            }
+            audioFeedback?.playSound(preferences.soundType.value)
         }
     }
 }

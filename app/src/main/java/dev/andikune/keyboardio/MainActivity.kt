@@ -92,8 +92,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.CrashReportStore
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.NicknameFontGenerator
+import dev.andikune.keyboardio.data.OfflineTranslator
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
+import dev.andikune.keyboardio.model.SoundEffectType
+import dev.andikune.keyboardio.model.SpacebarStyle
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
 import dev.andikune.keyboardio.ui.theme.CyberCard
@@ -362,13 +366,7 @@ fun MainScreen(
                 )
                 1 -> CustomizationTab(
                     preferences = preferences,
-                    rgbTheme = rgbTheme,
-                    heightScale = heightScale,
-                    oneHandedMode = oneHandedMode,
-                    isFloating = isFloating,
-                    hapticEnabled = hapticEnabled,
-                    soundEnabled = soundEnabled,
-                    longPressDelay = longPressDelay
+                    rgbTheme = rgbTheme
                 )
                 2 -> ClipboardTab(
                     items = clipboardList,
@@ -662,27 +660,45 @@ private fun StatusStepCard(
 @Composable
 private fun CustomizationTab(
     preferences: KeyboardPreferences,
-    rgbTheme: RgbThemeStyle,
-    heightScale: Float,
-    oneHandedMode: OneHandedMode,
-    isFloating: Boolean,
-    hapticEnabled: Boolean,
-    soundEnabled: Boolean,
-    longPressDelay: Long
+    rgbTheme: RgbThemeStyle
 ) {
+    val heightScale by preferences.heightScale.collectAsState()
+    val oneHandedMode by preferences.oneHandedMode.collectAsState()
+    val isFloating by preferences.isFloating.collectAsState()
+    val hapticEnabled by preferences.hapticFeedback.collectAsState()
+    val soundEnabled by preferences.keySound.collectAsState()
+    val soundType by preferences.soundType.collectAsState()
+    val spacebarStyle by preferences.spacebarStyle.collectAsState()
+    val smartBackspace by preferences.smartBackspace.collectAsState()
+    val autoCapitalize by preferences.autoCapitalize.collectAsState()
+    val autoCorrection by preferences.autoCorrection.collectAsState()
+    val swipeTyping by preferences.swipeTyping.collectAsState()
+    val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
+    val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
+    val longPressDelay by preferences.longPressDelay.collectAsState()
+
+    // Test text state for translator & nickname fonts showcase
+    var sampleNickInput by remember { mutableStateOf("Sultan Pro") }
+    var sampleTranslateInput by remember { mutableStateOf("Selamat pagi") }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Theme selection
+        // 1. Theme selection
         item {
             Text(
                 text = "Tema & Efek Cahaya Neon RGB",
                 color = TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Pilih kombinasi warna neon futuristik untuk papan tombol Anda.",
+                color = TextSecondary,
+                fontSize = 11.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
             LazyRow(
@@ -732,7 +748,7 @@ private fun CustomizationTab(
             }
         }
 
-        // Height adjustment
+        // 2. Visual Effects & Animations (Aurora Wave, Key Popup, Swipe Typing)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberCard),
@@ -742,27 +758,108 @@ private fun CustomizationTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Tinggi Keyboard: ${(heightScale * 100).toInt()}%",
+                        text = "Efek Visual & Animasi Neon",
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Slider(
-                        value = heightScale,
-                        onValueChange = { preferences.setHeightScale(it) },
-                        valueRange = 0.75f..1.35f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = rgbTheme.primary,
-                            activeTrackColor = rgbTheme.primary,
-                            inactiveTrackColor = CyberKeyBg
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Aurora Wave Effect
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Efek Gelombang Aurora (Aurora Wave)",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Menyinari tombol tetangga secara bergelombang saat tombol ditekan (tanpa latar belakang)",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = auroraWaveEffect,
+                            onCheckedChange = { preferences.setAuroraWaveEffect(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
                         )
-                    )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Key Popup Overlay
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Key Pop-up (Overlay Mengambang)",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Gelembung huruf neon mengambang tepat di atas tombol yang sedang ditekan",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = keyPopupEffect,
+                            onCheckedChange = { preferences.setKeyPopupEffect(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Swipe Typing Trail
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Ketik Geser (Gesture / Swipe Typing)",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Mengetik cepat dengan menggeser jari antar huruf disertai jejak cahaya neon",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = swipeTyping,
+                            onCheckedChange = { preferences.setSwipeTyping(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
                 }
             }
         }
 
-        // Long-Press delay adjustment
+        // 3. Kustomisasi Ikon & Tampilan Tombol Spasi (Spacebar)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberCard),
@@ -772,10 +869,277 @@ private fun CustomizationTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Jeda Tahan Tombol (Long-Press): ${longPressDelay}ms",
+                        text = "Kustomisasi Tombol Spasi (Spacebar)",
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Pilih label atau ikon futuristik pada tombol spasi",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SpacebarStyle.entries.forEach { style ->
+                            val isSelected = spacebarStyle == style
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) rgbTheme.primary else CyberKeyBg)
+                                    .clickable { preferences.setSpacebarStyle(style) }
+                                    .padding(vertical = 8.dp, horizontal = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = style.displayLabel,
+                                    color = if (isSelected) CyberBlack else TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Haptic & Audio Feedback with Sound Variety
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Pengaturan Getar & Suara (Haptic & Audio Feedback)",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Getar (Haptic Feedback)",
+                            color = TextPrimary,
+                            fontSize = 13.sp
+                        )
+                        Switch(
+                            checked = hapticEnabled,
+                            onCheckedChange = { preferences.setHaptic(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Suara Ketikan Tombol",
+                            color = TextPrimary,
+                            fontSize = 13.sp
+                        )
+                        Switch(
+                            checked = soundEnabled,
+                            onCheckedChange = { preferences.setSound(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    if (soundEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Pilihan Variasi Jenis Suara Ketikan:",
+                            color = rgbTheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                SoundEffectType.MECHANICAL to "Mekanikal (Tactile Click)",
+                                SoundEffectType.TYPEWRITER to "Mesin Tik (Classic Strike)",
+                                SoundEffectType.DIGITAL_POP to "Digital Pop (Futuristic Beep)",
+                                SoundEffectType.STANDARD to "Standard Click"
+                            ).forEach { (type, label) ->
+                                val isSelected = soundType == type
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) CyberDarkSurface else CyberKeyBg)
+                                        .border(
+                                            width = if (isSelected) 1.dp else 0.dp,
+                                            color = if (isSelected) rgbTheme.primary else Color.Transparent,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { preferences.setSoundType(type) }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) rgbTheme.primary else TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    if (isSelected) {
+                                        Text(
+                                            text = "Aktif",
+                                            color = rgbTheme.primary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Smart Typing Features (Smart Backspace, Auto-Capitalize, Auto-Correct)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Kecerdasan Mengetik (Smart Typing)",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Auto-Capitalization
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Auto Kapitalisasi",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Kapitalisasi otomatis di awal kalimat atau setelah tanda baca titik",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autoCapitalize,
+                            onCheckedChange = { preferences.setAutoCapitalize(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Smart Auto-Correction
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Koreksi Otomatis & Typo (Smart Auto-Correction)",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Mendeteksi dan mengoreksi typo secara cerdas menggunakan jarak Levenshtein saat tombol spasi ditekan",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autoCorrection,
+                            onCheckedChange = { preferences.setAutoCorrection(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Smart Backspace
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Hapus Otomatis Pintar (Smart Backspace)",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Menghapus kata per kata atau karakter dengan swipe/hold cerdas",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = smartBackspace,
+                            onCheckedChange = { preferences.setSmartBackspace(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = rgbTheme.primary,
+                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Long-Press delay adjustment
+                    Text(
+                        text = "Jeda Tahan Tombol (Long-Press): ${longPressDelay}ms",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                     Text(
                         text = "Kecepatan munculnya karakter sekunder saat tombol huruf ditahan.",
@@ -797,7 +1161,7 @@ private fun CustomizationTab(
             }
         }
 
-        // Layout Modes: One-Handed & Floating
+        // 6. Layout & Sizing (Height, One-Handed, Floating)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberCard),
@@ -807,14 +1171,32 @@ private fun CustomizationTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Mode Tata Letak",
+                        text = "Tata Letak & Ukuran Keyboard",
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // One-handed buttons
+                    Text(
+                        text = "Tinggi Keyboard: ${(heightScale * 100).toInt()}%",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Slider(
+                        value = heightScale,
+                        onValueChange = { preferences.setHeightScale(it) },
+                        valueRange = 0.75f..1.35f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = rgbTheme.primary,
+                            activeTrackColor = rgbTheme.primary,
+                            inactiveTrackColor = CyberKeyBg
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
                         text = "Mode Satu Tangan (One-Handed)",
                         color = TextSecondary,
@@ -850,9 +1232,8 @@ private fun CustomizationTab(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Floating toggle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -884,64 +1265,69 @@ private fun CustomizationTab(
             }
         }
 
-        // Feedback Toggles: Haptic & Sound
+        // 7. Showcase & Live Previews for Voice, Translator & Fancy Nickname Fonts
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
                 shape = RoundedCornerShape(14.dp),
                 border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Umpan Balik Ketikan (Feedback)",
-                        color = TextPrimary,
+                        text = "Fitur Cerdas Unggulan Keyboard iO",
+                        color = rgbTheme.primary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Getar (Haptic Feedback)",
-                            color = TextPrimary,
-                            fontSize = 13.sp
-                        )
-                        Switch(
-                            checked = hapticEnabled,
-                            onCheckedChange = { preferences.setHaptic(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = rgbTheme.primary,
-                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
-                            )
-                        )
-                    }
+                    // Speech-to-Text highlight
+                    Text(
+                        text = "🎙️ Input Suara (Dikte Lokal On-Device):",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Terletak tepat di samping teks 'iO' pada baris atas keyboard. Berfungsi secara lokal tanpa memerlukan API Key eksternal.",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Suara Tombol Mekanikal",
-                            color = TextPrimary,
-                            fontSize = 13.sp
-                        )
-                        Switch(
-                            checked = soundEnabled,
-                            onCheckedChange = { preferences.setSound(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = rgbTheme.primary,
-                                checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
-                            )
-                        )
-                    }
+                    // Offline translation test
+                    Text(
+                        text = "🌐 Terjemahan Lokal (Offline ID ↔ EN):",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Coba kata: \"${sampleTranslateInput}\" -> Hasil: \"${OfflineTranslator.translateIdToEn(sampleTranslateInput)}\"",
+                        color = NeonGreen,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Fancy font nickname showcase
+                    Text(
+                        text = "✨ Variasi Font & Gaya Nickname Game Sultan:",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val sultanPreview = NicknameFontGenerator.convertText(sampleNickInput, "gamer_wing")
+                    val gothicPreview = NicknameFontGenerator.convertText(sampleNickInput, "gothic")
+                    Text(
+                        text = "Sultan: $sultanPreview\nGothic: $gothicPreview",
+                        color = NeonCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
