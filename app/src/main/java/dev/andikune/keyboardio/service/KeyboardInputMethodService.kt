@@ -10,8 +10,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.ViewGroup
 import android.view.KeyEvent
 import android.view.View
+import android.widget.FrameLayout
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.ui.platform.ComposeView
@@ -90,24 +92,38 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     override fun onCreateInputView(): View {
-        return ComposeView(this).apply {
+        // ComposeView tidak cukup jika owner hanya dipasang pada dirinya sendiri:
+        // pada sebagian Android 12/OEM, WindowRecomposer mencari owner dari parent
+        // window root milik InputMethodService. Gunakan root container eksplisit.
+        return FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
             setViewTreeLifecycleOwner(this@KeyboardInputMethodService)
             setViewTreeViewModelStoreOwner(this@KeyboardInputMethodService)
             setViewTreeSavedStateRegistryOwner(this@KeyboardInputMethodService)
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
 
-            setContent {
-                KeyboardIOTheme {
-                    KeyboardScreen(
-                        preferences = preferences,
-                        clipboardRepo = clipboardRepo,
-                        onKeyAction = { handleKeyAction(it) },
-                        onSecondaryChar = { commitText(it) },
-                        onPasteText = { commitText(it) },
-                        onUndo = { performUndo() }
-                    )
+            addView(ComposeView(this@KeyboardInputMethodService).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                )
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+
+                setContent {
+                    KeyboardIOTheme {
+                        KeyboardScreen(
+                            preferences = preferences,
+                            clipboardRepo = clipboardRepo,
+                            onKeyAction = { handleKeyAction(it) },
+                            onSecondaryChar = { commitText(it) },
+                            onPasteText = { commitText(it) },
+                            onUndo = { performUndo() }
+                        )
+                    }
                 }
-            }
+            })
         }
     }
 

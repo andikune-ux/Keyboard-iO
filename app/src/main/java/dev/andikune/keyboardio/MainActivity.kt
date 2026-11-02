@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -151,27 +153,52 @@ class MainActivity : ComponentActivity() {
     private fun showLastCrashReportIfPresent() {
         val report = CrashReportStore(this).read() ?: return
         window.decorView.post {
+            val copyButton = Button(this).apply {
+                text = "Salin log cepat"
+                isAllCaps = false
+            }
+            val clearButton = Button(this).apply {
+                text = "Hapus log tersimpan"
+                isAllCaps = false
+            }
             val textView = TextView(this).apply {
                 text = report
                 setTextIsSelectable(true)
                 setPadding(32, 0, 32, 0)
             }
             val scrollView = ScrollView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                )
                 addView(textView)
             }
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(16, 0, 16, 0)
+                addView(copyButton)
+                addView(clearButton)
+                addView(scrollView)
+            }
 
-            AlertDialog.Builder(this)
+            val dialog = AlertDialog.Builder(this)
                 .setTitle("Crash terakhir terdeteksi")
                 .setMessage("Salin log ini lalu kirimkan untuk dianalisis. Teks juga dapat ditekan lama untuk memilih sebagian.")
-                .setView(scrollView)
-                .setPositiveButton("Salin log") { _, _ ->
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                    clipboard?.setPrimaryClip(ClipData.newPlainText("Keyboard iO crash report", report))
-                    Toast.makeText(this, "Crash log sudah disalin", Toast.LENGTH_SHORT).show()
-                }
-                .setNeutralButton("Hapus log") { _, _ -> CrashReportStore(this).clear() }
+                .setView(content)
                 .setNegativeButton("Tutup", null)
-                .show()
+                .create()
+
+            copyButton.setOnClickListener {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Keyboard iO crash report", report))
+                Toast.makeText(this, "Crash log sudah disalin", Toast.LENGTH_SHORT).show()
+            }
+            clearButton.setOnClickListener {
+                CrashReportStore(this).clear()
+                dialog.dismiss()
+            }
+            dialog.show()
         }
     }
 }
