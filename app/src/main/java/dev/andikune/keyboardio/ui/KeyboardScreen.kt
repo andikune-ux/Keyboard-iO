@@ -792,6 +792,8 @@ fun KeyboardScreen(
                     }
                 }
             }
+
+            UpdatePrompt()
         }
     }
 }

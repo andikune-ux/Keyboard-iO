@@ -101,6 +101,8 @@ import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.model.SoundEffectType
 import dev.andikune.keyboardio.model.SpacebarStyle
 import dev.andikune.keyboardio.service.KeyboardAudioFeedback
+import dev.andikune.keyboardio.service.UpdateService
+import dev.andikune.keyboardio.ui.UpdatePrompt
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
 import dev.andikune.keyboardio.ui.theme.CyberCard
@@ -153,6 +155,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+
+        UpdateService.check(this)
 
         showLastCrashReportIfPresent()
     }
@@ -379,6 +383,8 @@ fun MainScreen(
                     onClearAll = { clipboardRepo.clearUnpinned() }
                 )
             }
+
+            UpdatePrompt()
         }
     }
 }
