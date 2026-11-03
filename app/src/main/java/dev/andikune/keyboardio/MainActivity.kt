@@ -670,6 +670,7 @@ private fun CustomizationTab(
     val isFloating by preferences.isFloating.collectAsState()
     val hapticEnabled by preferences.hapticFeedback.collectAsState()
     val soundEnabled by preferences.keySound.collectAsState()
+    val longPressDelay by preferences.longPressDelay.collectAsState()
     val soundType by preferences.soundType.collectAsState()
     val spacebarStyle by preferences.spacebarStyle.collectAsState()
     val smartBackspace by preferences.smartBackspace.collectAsState()
