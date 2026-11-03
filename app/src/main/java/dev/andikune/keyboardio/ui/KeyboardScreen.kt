@@ -118,6 +118,7 @@ fun KeyboardScreen(
     clipboardRepo: ClipboardRepository,
     editorStateFlow: StateFlow<KeyboardEditorState>,
     composingWordFlow: StateFlow<String>,
+    learnedWordsFlow: StateFlow<Map<String, Int>> = kotlinx.coroutines.flow.MutableStateFlow(emptyMap()),
     voiceInputManager: VoiceInputManager? = null,
     audioFeedback: KeyboardAudioFeedback? = null,
     onKeyAction: (KeyAction) -> Unit,
@@ -140,6 +141,7 @@ fun KeyboardScreen(
     val clipboardItems by clipboardRepo.items.collectAsState()
     val editorState by editorStateFlow.collectAsState()
     val composingWord by composingWordFlow.collectAsState()
+    val learnedWords by learnedWordsFlow.collectAsState()
 
     // Active voice recognition state if available
     val isVoiceListening by (voiceInputManager?.isListening?.collectAsState() ?: remember { mutableStateOf(false) })
@@ -150,6 +152,13 @@ fun KeyboardScreen(
     var isTranslateMode by remember { mutableStateOf(false) }
     var translateSourceText by remember { mutableStateOf("") }
     var isIdToEn by remember { mutableStateOf(true) }
+    var isManualDirection by remember { mutableStateOf(false) }
+
+    LaunchedEffect(translateSourceText) {
+        if (!isManualDirection && translateSourceText.isNotBlank()) {
+            isIdToEn = OfflineTranslator.detectIdToEn(translateSourceText)
+        }
+    }
 
     val translateResultText = remember(translateSourceText, isIdToEn) {
         if (translateSourceText.isBlank()) ""
@@ -166,7 +175,7 @@ fun KeyboardScreen(
         if (editorState.isPassword || currentWordForSuggestions.trim().isEmpty()) {
             emptyList()
         } else {
-            WordSuggester.getSuggestions(currentWordForSuggestions)
+            WordSuggester.getSuggestions(currentWordForSuggestions, learnedWords = learnedWords)
         }
     }
 
@@ -424,7 +433,10 @@ fun KeyboardScreen(
                     sourceText = translateSourceText,
                     translatedText = translateResultText,
                     isIdToEn = isIdToEn,
-                    onSwitchLanguage = { isIdToEn = !isIdToEn },
+                    onSwitchLanguage = {
+                        isManualDirection = true
+                        isIdToEn = !isIdToEn
+                    },
                     onClearText = { translateSourceText = "" },
                     onInsertTranslation = { text ->
                         onPasteText(text)
@@ -437,6 +449,8 @@ fun KeyboardScreen(
                     onClose = {
                         isTranslateMode = false
                         translateSourceText = ""
+                        isManualDirection = false
+                        isIdToEn = true
                     }
                 )
             }
@@ -475,6 +489,8 @@ fun KeyboardScreen(
                             onClipboardClick = { activePanel = ActivePanel.CLIPBOARD },
                             onTranslateClick = {
                                 isTranslateMode = true
+                                isManualDirection = false
+                                isIdToEn = true
                                 activePanel = ActivePanel.NONE
                             },
                             onNicknameFontClick = { activePanel = ActivePanel.NICKNAME_FONT },

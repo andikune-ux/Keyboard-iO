@@ -57,10 +57,14 @@ object WordSuggester {
         "good" to listOf("morning", "afternoon", "night", "job"),
         "have" to listOf("a great day", "fun", "a good one"),
         "nice" to listOf("to meet you", "one", "day"),
-        "I" to listOf("am", "love you", "think", "want", "can")
+        "i" to listOf("am", "love you", "think", "want", "can")
     )
 
-    fun getSuggestions(prefix: String, maxCount: Int = 3): List<String> {
+    fun getSuggestions(
+        prefix: String,
+        maxCount: Int = 3,
+        learnedWords: Map<String, Int> = emptyMap()
+    ): List<String> {
         val trimmed = prefix.trim()
         if (trimmed.isEmpty()) return emptyList()
 
@@ -70,40 +74,67 @@ object WordSuggester {
 
         // Check if user just typed a completed word followed by space, or full word
         BIGRAM_MAP[lowerPrefix]?.let { nextWords ->
-            return nextWords.take(maxCount).map { formatCase(it, isFirstCapital, isAllCaps) }
+            return nextWords
+                .sortedWith(compareByDescending<String> { learnedWords[it.lowercase(Locale.ROOT)] ?: 0 }.thenBy { it.length })
+                .take(maxCount)
+                .map { formatCase(it, isFirstCapital, isAllCaps) }
         }
 
-        // 1. Prefix match
-        val prefixMatches = DICTIONARY
+        // 1. Prefix match. User-learned words are ranked before generic words.
+        val prefixMatches = (DICTIONARY + learnedWords.keys)
+            .distinct()
             .filter { it.startsWith(lowerPrefix) }
-            .sortedBy { it.length }
+            .sortedWith(compareByDescending<String> { learnedWords[it] ?: 0 }.thenBy { it.length }.thenBy { it })
 
         if (prefixMatches.isNotEmpty()) {
             return prefixMatches.take(maxCount).map { formatCase(it, isFirstCapital, isAllCaps) }
         }
 
         // 2. Typo correction via Levenshtein Distance
-        val fuzzyMatches = DICTIONARY
+        val fuzzyMatches = (DICTIONARY + learnedWords.keys)
+            .distinct()
             .map { it to levenshteinDistance(lowerPrefix, it) }
-            .filter { it.second <= 2 && it.second < lowerPrefix.length }
-            .sortedBy { it.second }
+            .filter { it.second <= correctionDistance(lowerPrefix.length) && it.second < lowerPrefix.length }
+            .sortedWith(compareBy<Pair<String, Int>> { it.second }.thenByDescending { learnedWords[it.first] ?: 0 })
             .map { it.first }
 
         return fuzzyMatches.take(maxCount).map { formatCase(it, isFirstCapital, isAllCaps) }
     }
 
-    fun findAutoCorrection(word: String): String? {
+    fun findAutoCorrection(word: String, learnedWords: Map<String, Int> = emptyMap()): String? {
         val trimmed = word.trim().lowercase(Locale.ROOT)
-        if (trimmed.length < 3) return null
-        if (DICTIONARY.contains(trimmed)) return null // Word is already correct!
+        if (trimmed.length < 3 || !trimmed.all { it.isLetter() || it == '\'' }) return null
+        if (DICTIONARY.contains(trimmed) || learnedWords.containsKey(trimmed)) return null
 
-        val best = DICTIONARY
+        val best = (DICTIONARY + learnedWords.keys)
+            .distinct()
             .map { it to levenshteinDistance(trimmed, it) }
-            .filter { it.second == 1 } // Only 1 typo distance away
-            .minByOrNull { it.second }
+            .filter { (candidate, distance) ->
+                distance <= correctionDistance(trimmed.length) &&
+                        candidate.length >= 3 &&
+                        distance < maxOf(2, trimmed.length / 2) &&
+                        (candidate.length != trimmed.length || isAdjacentTransposition(trimmed, candidate))
+            }
+            .minWithOrNull(compareBy<Pair<String, Int>> { it.second }
+                .thenByDescending { learnedWords[it.first] ?: 0 }
+                .thenBy { it.first.length })
             ?.first
 
         return best?.let { formatCase(it, word[0].isUpperCase(), word.all { ch -> ch.isUpperCase() }) }
+    }
+
+    private fun correctionDistance(length: Int): Int = when {
+        length <= 4 -> 1
+        else -> 2
+    }
+
+    private fun isAdjacentTransposition(first: String, second: String): Boolean {
+        if (first.length != second.length) return false
+        val different = first.indices.filter { first[it] != second[it] }
+        if (different.size != 2) return false
+        val left = different[0]
+        val right = different[1]
+        return right == left + 1 && first[left] == second[right] && first[right] == second[left]
     }
 
     private fun levenshteinDistance(s1: String, s2: String): Int {

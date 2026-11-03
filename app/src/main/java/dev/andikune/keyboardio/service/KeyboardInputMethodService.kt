@@ -30,6 +30,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -56,6 +57,7 @@ class KeyboardInputMethodService : InputMethodService(),
         private set
     lateinit var clipboardRepo: ClipboardRepository
         private set
+    private lateinit var userWordHistory: UserWordHistory
 
     val editorState = MutableStateFlow(KeyboardEditorState())
     val composingWord = MutableStateFlow("")
@@ -80,6 +82,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
         preferences = KeyboardPreferences(applicationContext)
         clipboardRepo = ClipboardRepository(applicationContext)
+        userWordHistory = UserWordHistory(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         audioFeedback = KeyboardAudioFeedback(applicationContext)
         voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
@@ -129,6 +132,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         clipboardRepo = clipboardRepo,
                         editorStateFlow = editorState,
                         composingWordFlow = composingWord,
+                        learnedWordsFlow = userWordHistory.words,
                         voiceInputManager = voiceInputManager,
                         audioFeedback = audioFeedback,
                         onKeyAction = { handleKeyAction(it) },
@@ -263,10 +267,7 @@ class KeyboardInputMethodService : InputMethodService(),
                 if (undoStack.isNotEmpty()) {
                     undoStack.pop()
                 }
-                val curr = composingWord.value
-                if (curr.isNotEmpty()) {
-                    composingWord.value = curr.dropLast(1)
-                }
+                refreshComposingWord()
             }
             is KeyAction.SmartDeleteWord -> {
                 performSmartDeleteWord()
@@ -274,20 +275,23 @@ class KeyboardInputMethodService : InputMethodService(),
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
                 if (preferences.autoCorrection.value && currentWord.length >= 2) {
-                    val autoFixed = WordSuggester.findAutoCorrection(currentWord)
+                    val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
                         ic.deleteSurroundingText(currentWord.length, 0)
                         ic.commitText("$autoFixed ", 1)
                         undoStack.push("$autoFixed ")
+                        userWordHistory.learn(autoFixed)
                         composingWord.value = ""
                         return
                     }
                 }
+                userWordHistory.learn(currentWord)
                 commitText(" ")
                 composingWord.value = ""
             }
             is KeyAction.Enter -> {
+                userWordHistory.learn(composingWord.value)
                 val editorInfo = currentInputEditorInfo
                 val inputType = editorInfo?.inputType ?: 0
                 val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
@@ -335,7 +339,7 @@ class KeyboardInputMethodService : InputMethodService(),
         val deleteCount = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(textBefore)
         val count = if (deleteCount > 0) deleteCount else 1
         ic.deleteSurroundingText(count, 0)
-        composingWord.value = ""
+        refreshComposingWord()
     }
 
     private fun commitText(text: String) {
@@ -344,7 +348,13 @@ class KeyboardInputMethodService : InputMethodService(),
 
         var toCommit = text
         // Smart Auto-Capitalization: Capitalize start of sentence if enabled
-        if (preferences.autoCapitalize.value &&
+        val inputType = currentInputEditorInfo?.inputType ?: 0
+        val fieldRequestsCapitalization = (inputType and (
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                        InputType.TYPE_TEXT_FLAG_CAP_WORDS or
+                        InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+                )) != 0
+        if (preferences.autoCapitalize.value && fieldRequestsCapitalization &&
             text.length == 1 &&
             text[0].isLetter() &&
             composingWord.value.isEmpty()
@@ -366,7 +376,7 @@ class KeyboardInputMethodService : InputMethodService(),
         undoStack.push(toCommit)
 
         if (toCommit.length == 1 && toCommit[0].isLetter()) {
-            composingWord.value += toCommit
+            refreshComposingWord()
         } else {
             composingWord.value = ""
         }
@@ -381,6 +391,7 @@ class KeyboardInputMethodService : InputMethodService(),
         }
         ic.commitText("$word ", 1)
         undoStack.push("$word ")
+        userWordHistory.learn(word)
         composingWord.value = ""
     }
 
@@ -393,7 +404,12 @@ class KeyboardInputMethodService : InputMethodService(),
         } else {
             ic.deleteSurroundingText(1, 0)
         }
-        composingWord.value = ""
+        refreshComposingWord()
+    }
+
+    private fun refreshComposingWord() {
+        val beforeCursor = currentInputConnection?.getTextBeforeCursor(64, 0)?.toString().orEmpty()
+        composingWord.value = beforeCursor.takeLastWhile { it.isLetter() || it == '\'' }
     }
 
     private fun provideFeedback() {

@@ -35,7 +35,7 @@ class KeyboardUnitTest {
         assertEquals(5, row4.size)
         assertEquals("?123", row4[0].primary)
         assertEquals(",", row4[1].primary)
-        assertEquals("spasi", row4[2].primary)
+        assertEquals("␣", row4[2].primary)
         assertEquals(".", row4[3].primary)
         assertEquals("↵", row4[4].primary)
         // Also test custom spacebar label
@@ -140,6 +140,20 @@ class KeyboardUnitTest {
 
         val translatedId = dev.andikune.keyboardio.data.OfflineTranslator.translateEnToId("Thank you")
         assertTrue(translatedId.equals("Terima kasih", ignoreCase = true))
+
+        assertTrue(dev.andikune.keyboardio.data.OfflineTranslator.detectIdToEn("saya sedang belajar"))
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.detectIdToEn("I am learning"))
+        assertTrue(dev.andikune.keyboardio.data.OfflineTranslator.translateAuto("selamat pagi").contains("good morning", ignoreCase = true))
+        assertTrue(dev.andikune.keyboardio.data.OfflineTranslator.translateAuto("thank you").contains("terima kasih", ignoreCase = true))
+    }
+
+    @Test
+    fun testLearnedWordsRankSuggestionsAndCorrection() {
+        val learned = mapOf("kamar" to 20, "kami" to 1)
+        val suggestions = WordSuggester.getSuggestions("kam", learnedWords = learned)
+        assertEquals("kamar", suggestions.first())
+        assertEquals("kamu", WordSuggester.findAutoCorrection("kmu", learned))
+        assertEquals(null, WordSuggester.findAutoCorrection("teh", learned))
     }
 
     @Test

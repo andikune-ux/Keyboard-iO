@@ -308,6 +308,26 @@ object OfflineTranslator {
     fun translateIdToEn(text: String): String = translate(text, true)
     fun translateEnToId(text: String): String = translate(text, false)
 
+    /** Detects the dominant language of the input without requiring a manual toggle. */
+    fun detectIdToEn(text: String): Boolean {
+        val normalized = text.lowercase(Locale.ROOT)
+        val words = Regex("[\\p{L}']+").findAll(normalized).map { it.value }.toList()
+        if (words.isEmpty()) return true
+
+        val idScore = words.count { VOCAB_ID_TO_EN.containsKey(it) } * 2 +
+                PHRASES_ID_TO_EN.count { normalized.contains(it.first) } * 3
+        val enScore = words.count { VOCAB_EN_TO_ID.containsKey(it) } * 2 +
+                PHRASES_EN_TO_ID.count { normalized.contains(it.first) } * 3
+
+        return when {
+            idScore == 0 && enScore == 0 -> true
+            idScore == enScore -> !words.any { VOCAB_EN_TO_ID.containsKey(it) }
+            else -> idScore > enScore
+        }
+    }
+
+    fun translateAuto(text: String): String = translate(text, detectIdToEn(text))
+
     private fun preserveCase(original: String, translated: String): String {
         if (original.isEmpty() || translated.isEmpty()) return translated
         return when {
