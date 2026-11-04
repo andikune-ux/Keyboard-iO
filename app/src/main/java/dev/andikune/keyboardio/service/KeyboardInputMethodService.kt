@@ -30,6 +30,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.TypingActivityStore
 import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.EnterActionType
@@ -60,6 +61,8 @@ class KeyboardInputMethodService : InputMethodService(),
         private set
     lateinit var userWordHistory: UserWordHistory
         private set
+    lateinit var typingActivityStore: TypingActivityStore
+        private set
 
     val editorState = MutableStateFlow(KeyboardEditorState())
     val composingWord = MutableStateFlow("")
@@ -70,6 +73,11 @@ class KeyboardInputMethodService : InputMethodService(),
 
     private var audioFeedback: KeyboardAudioFeedback? = null
     private var voiceInputManager: VoiceInputManager? = null
+
+    // Session typing activity metrics (counted from keyboard show to hide, auto-purged > 24h)
+    private var sessionStartTime: Long = 0L
+    private var sessionCharCount: Int = 0
+    private var sessionWordCount: Int = 0
 
     // Undo history stack
     private val undoStack = Stack<String>()
@@ -86,6 +94,7 @@ class KeyboardInputMethodService : InputMethodService(),
         preferences = KeyboardPreferences(applicationContext)
         clipboardRepo = ClipboardRepository(applicationContext)
         userWordHistory = UserWordHistory(applicationContext)
+        typingActivityStore = TypingActivityStore(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         audioFeedback = KeyboardAudioFeedback(applicationContext)
         voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
@@ -137,6 +146,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         composingWordFlow = composingWord,
                         previousWordFlow = previousWord,
                         userWordHistoryFlow = userWordHistory.words,
+                        typingActivityStore = typingActivityStore,
                         voiceInputManager = voiceInputManager,
                         audioFeedback = audioFeedback,
                         onKeyAction = { handleKeyAction(it) },
@@ -212,6 +222,11 @@ class KeyboardInputMethodService : InputMethodService(),
         composingWord.value = ""
         updatePreviousWord()
 
+        // Reset and begin tracking new typing session
+        sessionStartTime = System.currentTimeMillis()
+        sessionCharCount = 0
+        sessionWordCount = 0
+
         if (!isPassword) {
             checkAndRecordClipboard()
         }
@@ -222,6 +237,18 @@ class KeyboardInputMethodService : InputMethodService(),
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         composingWord.value = ""
+
+        // Complete session and save to store (auto-purged after 24 hours)
+        val duration = (System.currentTimeMillis() - sessionStartTime).coerceAtLeast(0L)
+        if (sessionCharCount > 0 || sessionWordCount > 0) {
+            typingActivityStore.recordSession(
+                charCount = sessionCharCount,
+                wordCount = sessionWordCount.coerceAtLeast(1),
+                durationMs = duration
+            )
+        }
+        sessionCharCount = 0
+        sessionWordCount = 0
     }
 
     override fun onDestroy() {
@@ -381,6 +408,11 @@ class KeyboardInputMethodService : InputMethodService(),
         ic.commitText(toCommit, 1)
         undoStack.push(toCommit)
 
+        sessionCharCount += toCommit.length
+        if (toCommit.any { it == ' ' || it == '\n' || it == '.' || it == '?' || it == '!' || it == ',' }) {
+            sessionWordCount++
+        }
+
         if (toCommit.length == 1 && toCommit[0].isLetter()) {
             composingWord.value += toCommit
         } else {
@@ -400,8 +432,12 @@ class KeyboardInputMethodService : InputMethodService(),
         ic.commitText("$cleanWord ", 1)
         undoStack.push("$cleanWord ")
         userWordHistory.learn(cleanWord)
+
+        sessionCharCount += cleanWord.length + 1
+        sessionWordCount++
+
         composingWord.value = ""
-        previousWord.value = cleanWord.lowercase(Locale.ROOT)
+        previousWord.value = cleanWord.substringAfterLast(' ').lowercase(Locale.ROOT)
     }
 
     private fun updatePreviousWord() {

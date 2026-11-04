@@ -38,17 +38,34 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.runtime.rememberCoroutineScope
+import dev.andikune.keyboardio.data.TypingActivityStore
+import dev.andikune.keyboardio.data.TypingSessionRecord
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -685,7 +702,45 @@ private fun CustomizationTab(
     val swipeTyping by preferences.swipeTyping.collectAsState()
     val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
     val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
+    val customBgType by preferences.customBgType.collectAsState()
+    val customBgPath by preferences.customBgPath.collectAsState()
+    val customBgOpacity by preferences.customBgOpacity.collectAsState()
+    val customBgDim by preferences.customBgDim.collectAsState()
+
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val typingActivityStore = remember { TypingActivityStore(context) }
+    val typingSessions by typingActivityStore.sessions.collectAsState()
+    val typingStats = remember(typingSessions) { typingActivityStore.getStats() }
+
+    val mediaPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val mimeType = context.contentResolver.getType(uri).orEmpty()
+                    val isVideo = mimeType.startsWith("video")
+                    val fileName = if (isVideo) "custom_keyboard_bg.mp4" else "custom_keyboard_bg.jpg"
+                    val destFile = File(context.filesDir, fileName)
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    preferences.setCustomBackground(
+                        type = if (isVideo) "VIDEO" else "IMAGE",
+                        path = destFile.absolutePath,
+                        opacity = 0.45f,
+                        dim = 0.5f
+                    )
+                }.onFailure {
+                    Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
+                }
+            }
+        }
+    }
+
     val audioFeedback = remember { KeyboardAudioFeedback(context) }
     DisposableEffect(Unit) {
         onDispose {
@@ -758,6 +813,277 @@ private fun CustomizationTab(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1b. Custom Background (Foto & Video dari Galeri)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Latar Belakang Kustom",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Gunakan foto atau video dari galeri HP dengan efek peredup",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (customBgType != "NONE") {
+                            Text(
+                                text = "Hapus",
+                                color = NeonMagenta,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable { preferences.clearCustomBackground() }
+                                    .padding(4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                mediaPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (customBgType == "IMAGE") rgbTheme.primary else CyberKeyBg,
+                                contentColor = if (customBgType == "IMAGE") CyberBlack else TextPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Pilih Foto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                mediaPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (customBgType == "VIDEO") rgbTheme.secondary else CyberKeyBg,
+                                contentColor = if (customBgType == "VIDEO") CyberBlack else TextPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VideoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Pilih Video", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (customBgType != "NONE" && customBgPath.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Status: Aktif (${if (customBgType == "VIDEO") "Video Loop" else "Foto Statis"})",
+                            color = NeonGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Transparansi / Opacity Media: ${(customBgOpacity * 100).toInt()}%",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                        Slider(
+                            value = customBgOpacity,
+                            onValueChange = { preferences.setCustomBgOpacity(it) },
+                            valueRange = 0.1f..1.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = rgbTheme.primary,
+                                activeTrackColor = rgbTheme.primary
+                            )
+                        )
+
+                        Text(
+                            text = "Lapisan Redup / Dimming Gelap: ${(customBgDim * 100).toInt()}%",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                        Slider(
+                            value = customBgDim,
+                            onValueChange = { preferences.setCustomBgDim(it) },
+                            valueRange = 0.0f..0.9f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = rgbTheme.secondary,
+                                activeTrackColor = rgbTheme.secondary
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1c. Riwayat Aktivitas Mengetik (Auto-reset 24 Jam)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = rgbTheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Riwayat Aktivitas Mengetik",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (typingSessions.isNotEmpty()) {
+                            Text(
+                                text = "Bersihkan",
+                                color = rgbTheme.secondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable { typingActivityStore.clearAll() }
+                                    .padding(4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Statistik 24 jam terakhir dari saat keyboard dibuka hingga ditutup. Otomatis terhapus setelah 24 jam.",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${typingStats.totalCharacters}",
+                                    color = rgbTheme.primary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("Karakter", color = TextTertiary, fontSize = 10.sp)
+                            }
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${typingStats.totalWords}",
+                                    color = rgbTheme.secondary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("Kata", color = TextTertiary, fontSize = 10.sp)
+                            }
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${typingStats.totalSessions}",
+                                    color = rgbTheme.accent,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("Sesi", color = TextTertiary, fontSize = 10.sp)
+                            }
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CyberDarkSurface),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                val seconds = typingStats.totalDurationMs / 1000
+                                val timeStr = if (seconds < 60) "${seconds}d" else "${seconds / 60}m"
+                                Text(
+                                    text = timeStr,
+                                    color = NeonGreen,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("Durasi", color = TextTertiary, fontSize = 10.sp)
+                            }
                         }
                     }
                 }

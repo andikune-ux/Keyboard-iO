@@ -294,7 +294,10 @@ object WordSuggester {
             FREQUENT_WORDS.filterNot { learnedSet.contains(it.word) } + learnedEntries
         }
 
-        // 1. Prefix completions (Search words that start with what user is typing)
+        // 1. Missing space detection (Saran spasi saat pengguna lupa spasi: e.g. "apakabar", "selamatpagi", "terimakasih")
+        val missingSpace = if (lower.length >= 5) findMissingSpaceSuggestion(trimmed, learnedWords) else null
+
+        // 2. Prefix completions (Search words that start with what user is typing)
         val prefixMatches = pool
             .filter { it.word.startsWith(lower) }
             .sortedWith(
@@ -303,11 +306,22 @@ object WordSuggester {
             )
             .map { formatCase(it.word, isFirstCapital, isAllCaps) }
 
-        if (prefixMatches.isNotEmpty()) {
-            return prefixMatches.distinct().take(maxCount)
+        val suggestions = mutableListOf<String>()
+        if (missingSpace != null) {
+            if (!VALID_WORDS_SET.contains(lower) && !learnedWords.containsKey(lower)) {
+                suggestions.add(missingSpace)
+            }
+        }
+        suggestions.addAll(prefixMatches)
+        if (missingSpace != null && !suggestions.contains(missingSpace)) {
+            suggestions.add(1.coerceAtMost(suggestions.size), missingSpace)
         }
 
-        // 2. Typo Detection & Fuzzy Correction via Spatial-Weighted Damerau-Levenshtein Distance
+        if (suggestions.isNotEmpty()) {
+            return suggestions.distinct().take(maxCount)
+        }
+
+        // 3. Typo Detection & Fuzzy Correction via Spatial-Weighted Damerau-Levenshtein Distance
         if (lower.length >= 3) {
             val candidates = pool
                 .map { entry ->
@@ -320,13 +334,63 @@ object WordSuggester {
                 .sortedByDescending { it.third } // Highest score first
                 .map { formatCase(it.first, isFirstCapital, isAllCaps) }
 
-            if (candidates.isNotEmpty()) {
-                return candidates.distinct().take(maxCount)
+            val fuzzyResults = mutableListOf<String>()
+            if (missingSpace != null) fuzzyResults.add(missingSpace)
+            fuzzyResults.addAll(candidates)
+
+            if (fuzzyResults.isNotEmpty()) {
+                return fuzzyResults.distinct().take(maxCount)
             }
         }
 
         // If no match found, keep raw word
-        return listOf(trimmed)
+        return if (missingSpace != null) listOf(missingSpace, trimmed) else listOf(trimmed)
+    }
+
+    /**
+     * Missing Space ("Saran Spasi") Algorithm:
+     * Discovers if an unspaced word S can be segmented into two valid words W1 + W2
+     * (e.g. "terimakasih" -> "terima kasih", "selamatpagi" -> "selamat pagi", "apakabar" -> "apa kabar",
+     * "sudahmakan" -> "sudah makan", "lagiapa" -> "lagi apa").
+     * Selects the split with the highest combined word frequency.
+     */
+    fun findMissingSpaceSuggestion(
+        word: String,
+        learnedWords: Map<String, Int> = emptyMap()
+    ): String? {
+        val trimmed = word.trim()
+        if (trimmed.length < 5) return null
+        val lower = trimmed.lowercase(Locale.ROOT)
+
+        val isFirstCapital = trimmed[0].isUpperCase()
+        val isAllCaps = trimmed.all { it.isUpperCase() }
+
+        var bestSplit: Pair<String, String>? = null
+        var bestScore = -1
+
+        for (i in 2..(lower.length - 2)) {
+            val part1 = lower.substring(0, i)
+            val part2 = lower.substring(i)
+
+            val part1Valid = VALID_WORDS_SET.contains(part1) || learnedWords.containsKey(part1)
+            val part2Valid = VALID_WORDS_SET.contains(part2) || learnedWords.containsKey(part2)
+
+            if (part1Valid && part2Valid) {
+                val f1 = WORD_FREQ_MAP[part1] ?: (learnedWords[part1]?.times(10) ?: 40)
+                val f2 = WORD_FREQ_MAP[part2] ?: (learnedWords[part2]?.times(10) ?: 40)
+                val score = f1 + f2
+                if (score > bestScore) {
+                    bestScore = score
+                    bestSplit = Pair(part1, part2)
+                }
+            }
+        }
+
+        return bestSplit?.let { (p1, p2) ->
+            val formatted1 = formatCase(p1, isFirstCapital, isAllCaps)
+            val formatted2 = if (isAllCaps) p2.uppercase(Locale.ROOT) else p2
+            "$formatted1 $formatted2"
+        }
     }
 
     /**

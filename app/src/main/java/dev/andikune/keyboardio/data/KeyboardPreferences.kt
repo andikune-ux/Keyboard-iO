@@ -181,4 +181,56 @@ class KeyboardPreferences(context: Context) {
     }
 
     private fun loadKeyPopup(): Boolean = prefs.getBoolean("key_popup", true)
+
+    // Custom Background Settings (Photo / Video from Gallery)
+    private val _customBgType = MutableStateFlow(loadCustomBgType())
+    val customBgType: StateFlow<String> = _customBgType.asStateFlow() // "NONE", "IMAGE", "VIDEO"
+
+    private val _customBgPath = MutableStateFlow(loadCustomBgPath())
+    val customBgPath: StateFlow<String> = _customBgPath.asStateFlow()
+
+    private val _customBgOpacity = MutableStateFlow(loadCustomBgOpacity())
+    val customBgOpacity: StateFlow<Float> = _customBgOpacity.asStateFlow()
+
+    private val _customBgDim = MutableStateFlow(loadCustomBgDim())
+    val customBgDim: StateFlow<Float> = _customBgDim.asStateFlow()
+
+    fun setCustomBackground(type: String, path: String, opacity: Float = 0.45f, dim: Float = 0.5f) {
+        prefs.edit()
+            .putString("custom_bg_type", type)
+            .putString("custom_bg_path", path)
+            .putFloat("custom_bg_opacity", opacity.coerceIn(0.1f, 1f))
+            .putFloat("custom_bg_dim", dim.coerceIn(0f, 0.9f))
+            .apply()
+        _customBgType.value = type
+        _customBgPath.value = path
+        _customBgOpacity.value = opacity.coerceIn(0.1f, 1f)
+        _customBgDim.value = dim.coerceIn(0f, 0.9f)
+    }
+
+    fun setCustomBgOpacity(opacity: Float) {
+        val clamped = opacity.coerceIn(0.1f, 1f)
+        prefs.edit().putFloat("custom_bg_opacity", clamped).apply()
+        _customBgOpacity.value = clamped
+    }
+
+    fun setCustomBgDim(dim: Float) {
+        val clamped = dim.coerceIn(0f, 0.9f)
+        prefs.edit().putFloat("custom_bg_dim", dim).apply()
+        _customBgDim.value = clamped
+    }
+
+    fun clearCustomBackground() {
+        prefs.edit()
+            .putString("custom_bg_type", "NONE")
+            .putString("custom_bg_path", "")
+            .apply()
+        _customBgType.value = "NONE"
+        _customBgPath.value = ""
+    }
+
+    private fun loadCustomBgType(): String = prefs.getString("custom_bg_type", "NONE") ?: "NONE"
+    private fun loadCustomBgPath(): String = prefs.getString("custom_bg_path", "") ?: ""
+    private fun loadCustomBgOpacity(): Float = prefs.getFloat("custom_bg_opacity", 0.45f)
+    private fun loadCustomBgDim(): Float = prefs.getFloat("custom_bg_dim", 0.5f)
 }

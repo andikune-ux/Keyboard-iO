@@ -98,6 +98,23 @@ import dev.andikune.keyboardio.model.KeyboardLayoutMode
 import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.OneHandedMode
 import dev.andikune.keyboardio.model.RgbThemeStyle
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.SurfaceTexture
+import android.media.MediaPlayer
+import android.view.Surface
+import android.view.TextureView
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import dev.andikune.keyboardio.MainActivity
+import dev.andikune.keyboardio.data.TypingActivityStats
+import dev.andikune.keyboardio.data.TypingActivityStore
+import java.io.File
 import dev.andikune.keyboardio.service.VoiceInputManager
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
@@ -120,6 +137,7 @@ fun KeyboardScreen(
     composingWordFlow: StateFlow<String>,
     previousWordFlow: StateFlow<String>? = null,
     userWordHistoryFlow: StateFlow<Map<String, Int>>? = null,
+    typingActivityStore: TypingActivityStore? = null,
     voiceInputManager: VoiceInputManager? = null,
     audioFeedback: KeyboardAudioFeedback? = null,
     onKeyAction: (KeyAction) -> Unit,
@@ -130,6 +148,7 @@ fun KeyboardScreen(
     onSuggestionPicked: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val rgbTheme by preferences.theme.collectAsState()
     val heightScale by preferences.heightScale.collectAsState()
     val oneHandedMode by preferences.oneHandedMode.collectAsState()
@@ -138,6 +157,12 @@ fun KeyboardScreen(
     val isAuroraEnabled by preferences.auroraWaveEffect.collectAsState()
     val isPopupEnabled by preferences.keyPopupEffect.collectAsState()
     val isSwipeTypingEnabled by preferences.swipeTyping.collectAsState()
+
+    // Custom background states
+    val customBgType by preferences.customBgType.collectAsState()
+    val customBgPath by preferences.customBgPath.collectAsState()
+    val customBgOpacity by preferences.customBgOpacity.collectAsState()
+    val customBgDim by preferences.customBgDim.collectAsState()
 
     val clipboardItems by clipboardRepo.items.collectAsState()
     val editorState by editorStateFlow.collectAsState()
@@ -252,7 +277,30 @@ fun KeyboardScreen(
         }
     }
 
+    var userHasTypedInSession by remember { mutableStateOf(false) }
+    var dismissedClipId by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(composingWord) {
+        if (composingWord.isNotEmpty()) {
+            userHasTypedInSession = true
+        }
+    }
+
+    val latestClipItem = clipboardItems.firstOrNull()
+    val clipboardSuggestion = remember(latestClipItem, dismissedClipId, userHasTypedInSession, composingWord, editorState.isPassword) {
+        if (!editorState.isPassword &&
+            !userHasTypedInSession &&
+            composingWord.isEmpty() &&
+            latestClipItem != null &&
+            latestClipItem.text.isNotBlank() &&
+            latestClipItem.id != dismissedClipId
+        ) {
+            latestClipItem.text
+        } else null
+    }
+
     fun onKeyTapped(key: KeyItem) {
+        userHasTypedInSession = true
         if (isAuroraEnabled) {
             coroutineScope.launch {
                 activeWave = AuroraWave(key.row, key.col)
@@ -335,6 +383,55 @@ fun KeyboardScreen(
     Box(
         modifier = containerModifier.testTag("keyboard_main_container")
     ) {
+        // Custom background layer (Photo / Video from Gallery)
+        if (customBgType != "NONE" && customBgPath.isNotBlank()) {
+            val bgFile = remember(customBgPath) { File(customBgPath) }
+            if (bgFile.exists() && bgFile.canRead()) {
+                Box(modifier = Modifier.matchParentSize()) {
+                    if (customBgType == "IMAGE") {
+                        val bitmap = remember(customBgPath) {
+                            runCatching {
+                                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                BitmapFactory.decodeFile(customBgPath, opts)
+                                var sampleSize = 1
+                                while ((opts.outWidth / sampleSize) > 1280 || (opts.outHeight / sampleSize) > 720) {
+                                    sampleSize *= 2
+                                }
+                                val decodeOpts = BitmapFactory.Options().apply {
+                                    inSampleSize = sampleSize
+                                    inPreferredConfig = Bitmap.Config.RGB_565
+                                }
+                                BitmapFactory.decodeFile(customBgPath, decodeOpts)
+                            }.getOrNull()
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .alpha(customBgOpacity)
+                            )
+                        }
+                    } else if (customBgType == "VIDEO") {
+                        SafeVideoBackground(
+                            videoPath = customBgPath,
+                            opacity = customBgOpacity,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+
+                    // Contrast Dim Scrim to ensure keys and neon stay 100% visible
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = customBgDim))
+                    )
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -392,6 +489,14 @@ fun KeyboardScreen(
                 rgbTheme = rgbTheme,
                 isPassword = editorState.isPassword,
                 suggestions = suggestions,
+                clipboardSuggestion = clipboardSuggestion,
+                onPasteClipboardSuggestion = { text ->
+                    onPasteText(text)
+                    dismissedClipId = latestClipItem?.id
+                },
+                onDismissClipboardSuggestion = {
+                    dismissedClipId = latestClipItem?.id
+                },
                 isToolsOpen = isToolsOpen,
                 isTranslateMode = isTranslateMode,
                 onToggleTools = { isToolsOpen = !isToolsOpen },
@@ -448,7 +553,7 @@ fun KeyboardScreen(
                 )
             }
 
-            // Panel Area (Grid Menu, Emoji, Clipboard, Resize, Nickname, Voice Input)
+            // Panel Area (Grid Menu, Emoji, Clipboard, Resize, Nickname, Voice Input, Typing Activity)
             AnimatedVisibility(
                 visible = activePanel != ActivePanel.NONE,
                 enter = slideInVertically { it / 2 } + fadeIn(),
@@ -492,7 +597,26 @@ fun KeyboardScreen(
                             onSoundClick = {
                                 activePanel = ActivePanel.SOUND_SETTINGS
                             },
+                            onSettingsClick = {
+                                val intent = Intent(context, MainActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                                activePanel = ActivePanel.NONE
+                            },
+                            onTypingActivityClick = {
+                                activePanel = ActivePanel.TYPING_ACTIVITY
+                            },
                             onCloseClick = { activePanel = ActivePanel.NONE }
+                        )
+                    }
+                    ActivePanel.TYPING_ACTIVITY -> {
+                        val stats = typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
+                        TypingActivityPanel(
+                            stats = stats,
+                            rgbTheme = rgbTheme,
+                            onClearHistory = { typingActivityStore?.clearAll() },
+                            onClose = { activePanel = ActivePanel.NONE }
                         )
                     }
                     ActivePanel.EMOJI -> {
@@ -621,6 +745,8 @@ fun KeyboardScreen(
                                         waveProgress = currentWaveProgress,
                                         isAuroraEnabled = isAuroraEnabled,
                                         isPopupEnabled = isPopupEnabled,
+                                        startSpacerWeight = 0.5f,
+                                        endSpacerWeight = 0.5f,
                                         onKeyClick = { onKeyTapped(it) },
                                         onSecondaryClick = effectiveSecondaryChar
                                     )
@@ -828,6 +954,9 @@ private fun TopHeaderBar(
     rgbTheme: RgbThemeStyle,
     isPassword: Boolean,
     suggestions: List<String>,
+    clipboardSuggestion: String? = null,
+    onPasteClipboardSuggestion: (String) -> Unit = {},
+    onDismissClipboardSuggestion: () -> Unit = {},
     isToolsOpen: Boolean,
     isTranslateMode: Boolean,
     onToggleTools: () -> Unit,
@@ -902,7 +1031,7 @@ private fun TopHeaderBar(
             }
         }
 
-        // Center Area: Password Guard OR Word Suggestions Strip (Saran Pengetikan Cerdas)
+        // Center Area: Password Guard OR Clipboard Suggestion Chip OR Word Suggestions Strip (Saran Pengetikan Cerdas)
         if (isPassword) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -924,6 +1053,58 @@ private fun TopHeaderBar(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        } else if (clipboardSuggestion != null) {
+            // Saran Tempel Hasil Salin (Gboard clipboard chip with one-time dismiss)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(CyberCard)
+                        .border(0.8.dp, rgbTheme.primary, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { onPasteClipboardSuggestion(clipboardSuggestion) }
+                            .testTag("clipboard_suggestion_pill")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Tempel",
+                            tint = rgbTheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        val cleanDisplay = clipboardSuggestion.take(15).replace('\n', ' ')
+                        Text(
+                            text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
+                            color = TextPrimary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Abaikan saran tempel",
+                        tint = TextTertiary,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .clickable { onDismissClipboardSuggestion() }
+                            .testTag("dismiss_clipboard_suggestion")
+                    )
+                }
             }
         } else if (suggestions.isNotEmpty()) {
             Row(
@@ -1046,6 +1227,8 @@ private fun KeyRow(
     isAuroraEnabled: Boolean = true,
     isPopupEnabled: Boolean = true,
     isShiftActive: Boolean = false,
+    startSpacerWeight: Float = 0f,
+    endSpacerWeight: Float = 0f,
     onKeyClick: (KeyItem) -> Unit,
     onSecondaryClick: (String) -> Unit,
     onSmartDeleteWord: (() -> Unit)? = null
@@ -1055,6 +1238,9 @@ private fun KeyRow(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (startSpacerWeight > 0f) {
+            Spacer(modifier = Modifier.weight(startSpacerWeight))
+        }
         keys.forEach { key ->
             KeyboardKey(
                 keyItem = key,
@@ -1082,8 +1268,12 @@ private fun KeyRow(
                     if (key.primary == "⌫" && onSmartDeleteWord != null) {
                         onSmartDeleteWord()
                     }
-                }
+                },
+                onSmartDeleteWord = onSmartDeleteWord
             )
+        }
+        if (endSpacerWeight > 0f) {
+            Spacer(modifier = Modifier.weight(endSpacerWeight))
         }
     }
 }
@@ -1125,4 +1315,45 @@ private fun OneHandedSideBar(
             )
         }
     }
+}
+
+@Composable
+private fun SafeVideoBackground(
+    videoPath: String,
+    opacity: Float,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        factory = { ctx ->
+            TextureView(ctx).apply {
+                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    var mediaPlayer: MediaPlayer? = null
+                    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                        runCatching {
+                            mediaPlayer = MediaPlayer().apply {
+                                setDataSource(videoPath)
+                                setSurface(Surface(surface))
+                                isLooping = true
+                                setVolume(0f, 0f) // Completely muted, 0% audio noise
+                                setOnErrorListener { _, _, _ -> true }
+                                prepareAsync()
+                                setOnPreparedListener { start() }
+                            }
+                        }
+                    }
+                    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
+                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                        runCatching {
+                            mediaPlayer?.stop()
+                            mediaPlayer?.release()
+                            mediaPlayer = null
+                        }
+                        return true
+                    }
+                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+                }
+            }
+        },
+        modifier = modifier.alpha(opacity)
+    )
 }
