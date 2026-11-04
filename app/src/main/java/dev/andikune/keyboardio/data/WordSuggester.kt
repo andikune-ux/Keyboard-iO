@@ -271,7 +271,11 @@ object WordSuggester {
      * - Center: Best match (high-frequency prefix completion or high-confidence autocorrect)
      * - Right: Alternative completion or secondary correction
      */
-    fun getWordCompletionsAndCorrections(composingWord: String, maxCount: Int = 3): List<String> {
+    fun getWordCompletionsAndCorrections(
+        composingWord: String,
+        maxCount: Int = 3,
+        learnedWords: Map<String, Int> = emptyMap()
+    ): List<String> {
         val trimmed = composingWord.trim()
         if (trimmed.isEmpty()) return emptyList()
 
@@ -279,22 +283,19 @@ object WordSuggester {
         val isFirstCapital = trimmed[0].isUpperCase()
         val isAllCaps = trimmed.all { it.isUpperCase() }
 
-        // 1. If user typed a word that already exists in dictionary,
-        // center is that exact word, followed by extensions or alternatives
-        if (VALID_WORDS_SET.contains(lower)) {
-            val extensions = FREQUENT_WORDS
-                .filter { it.word.startsWith(lower) && it.word != lower }
-                .sortedByDescending { it.frequency }
-                .map { formatCase(it.word, isFirstCapital, isAllCaps) }
-
-            val result = mutableListOf<String>()
-            result.add(formatCase(lower, isFirstCapital, isAllCaps)) // exact match first
-            result.addAll(extensions.take(maxCount - 1))
-            return result.take(maxCount)
+        val pool: List<WordEntry> = if (learnedWords.isEmpty()) {
+            FREQUENT_WORDS
+        } else {
+            val learnedEntries = learnedWords.map { (w, count) ->
+                val base = FREQUENT_WORDS.find { it.word == w }?.frequency ?: 50
+                WordEntry(w, base + count * 100)
+            }
+            val learnedSet = learnedWords.keys
+            FREQUENT_WORDS.filterNot { learnedSet.contains(it.word) } + learnedEntries
         }
 
-        // 2. Prefix completion (Search words that start with what user is typing)
-        val prefixMatches = FREQUENT_WORDS
+        // 1. Prefix completions (Search words that start with what user is typing)
+        val prefixMatches = pool
             .filter { it.word.startsWith(lower) }
             .sortedWith(
                 compareByDescending<WordEntry> { it.frequency }
@@ -303,17 +304,12 @@ object WordSuggester {
             .map { formatCase(it.word, isFirstCapital, isAllCaps) }
 
         if (prefixMatches.isNotEmpty()) {
-            val result = mutableListOf<String>()
-            // First slot: user's raw input in quotes so they can keep it if they want
-            result.add("\"$trimmed\"")
-            // Remaining slots: top prefix completions
-            result.addAll(prefixMatches.take(maxCount - 1))
-            return result.take(maxCount)
+            return prefixMatches.distinct().take(maxCount)
         }
 
-        // 3. Typo Detection & Fuzzy Correction via Spatial-Weighted Damerau-Levenshtein Distance
+        // 2. Typo Detection & Fuzzy Correction via Spatial-Weighted Damerau-Levenshtein Distance
         if (lower.length >= 3) {
-            val candidates = FREQUENT_WORDS
+            val candidates = pool
                 .map { entry ->
                     val dist = calculateSpatialEditDistance(lower, entry.word)
                     // Score = frequency bonus - spatial distance penalty
@@ -325,10 +321,7 @@ object WordSuggester {
                 .map { formatCase(it.first, isFirstCapital, isAllCaps) }
 
             if (candidates.isNotEmpty()) {
-                val result = mutableListOf<String>()
-                result.add("\"$trimmed\"") // Raw typed word option
-                result.addAll(candidates.take(maxCount - 1))
-                return result.take(maxCount)
+                return candidates.distinct().take(maxCount)
             }
         }
 
@@ -337,35 +330,53 @@ object WordSuggester {
     }
 
     /**
-     * Backward-compatible helper method used by older callers.
+     * Backward-compatible helper method used by callers.
      * Dispatches intelligently: if word is empty or followed by space, returns next-word predictions;
-     * if word is actively being typed, returns completions and typo corrections.
+     * if word is actively being typed, returns completions and typo corrections with learned word ranking.
      */
-    fun getSuggestions(wordOrPrefix: String, maxCount: Int = 3): List<String> {
+    fun getSuggestions(
+        wordOrPrefix: String,
+        maxCount: Int = 3,
+        learnedWords: Map<String, Int> = emptyMap()
+    ): List<String> {
         val trimmed = wordOrPrefix.trim()
         if (trimmed.isEmpty()) {
             return getNextWordPredictions("", maxCount)
         }
-        return getWordCompletionsAndCorrections(trimmed, maxCount)
+        return getWordCompletionsAndCorrections(trimmed, maxCount, learnedWords)
     }
 
     /**
      * Strict Auto-Correction logic executed when user taps Spacebar:
-     * - NEVER autocorrect a word that is already valid or recognized.
+     * - NEVER autocorrect a word that is already valid or recognized (in dictionary or learned words).
      * - NEVER autocorrect words shorter than 3 characters.
      * - ONLY autocorrect if there is a candidate with an overwhelmingly high spatial probability (cost <= 1.1).
      * Returns null if no safe auto-correction should take place.
      */
-    fun findAutoCorrection(word: String): String? {
+    fun findAutoCorrection(
+        word: String,
+        learnedWords: Map<String, Int> = emptyMap()
+    ): String? {
         val trimmed = word.trim()
         if (trimmed.length < 3) return null
 
         val lower = trimmed.lowercase(Locale.ROOT)
         // Rule 1: Never autocorrect a recognized word!
-        if (VALID_WORDS_SET.contains(lower)) return null
+        if (VALID_WORDS_SET.contains(lower) || learnedWords.containsKey(lower)) return null
+
+        val pool: List<WordEntry> = if (learnedWords.isEmpty()) {
+            FREQUENT_WORDS
+        } else {
+            val learnedEntries = learnedWords.map { (w, count) ->
+                val base = FREQUENT_WORDS.find { it.word == w }?.frequency ?: 50
+                WordEntry(w, base + count * 100)
+            }
+            val learnedSet = learnedWords.keys
+            FREQUENT_WORDS.filterNot { learnedSet.contains(it.word) } + learnedEntries
+        }
 
         // Rule 2: Calculate spatial edit distance
-        val bestCandidate = FREQUENT_WORDS
+        val bestCandidate = pool
             .map { entry ->
                 val dist = calculateSpatialEditDistance(lower, entry.word)
                 Triple(entry.word, dist, entry.frequency)

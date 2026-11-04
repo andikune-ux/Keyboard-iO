@@ -30,6 +30,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
+import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -57,6 +58,8 @@ class KeyboardInputMethodService : InputMethodService(),
         private set
     lateinit var clipboardRepo: ClipboardRepository
         private set
+    lateinit var userWordHistory: UserWordHistory
+        private set
 
     val editorState = MutableStateFlow(KeyboardEditorState())
     val composingWord = MutableStateFlow("")
@@ -82,6 +85,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
         preferences = KeyboardPreferences(applicationContext)
         clipboardRepo = ClipboardRepository(applicationContext)
+        userWordHistory = UserWordHistory(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         audioFeedback = KeyboardAudioFeedback(applicationContext)
         voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
@@ -132,6 +136,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         editorStateFlow = editorState,
                         composingWordFlow = composingWord,
                         previousWordFlow = previousWord,
+                        userWordHistoryFlow = userWordHistory.words,
                         voiceInputManager = voiceInputManager,
                         audioFeedback = audioFeedback,
                         onKeyAction = { handleKeyAction(it) },
@@ -279,16 +284,20 @@ class KeyboardInputMethodService : InputMethodService(),
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
                 if (preferences.autoCorrection.value && currentWord.length >= 2) {
-                    val autoFixed = WordSuggester.findAutoCorrection(currentWord)
+                    val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
                         ic.deleteSurroundingText(currentWord.length, 0)
                         ic.commitText("$autoFixed ", 1)
                         undoStack.push("$autoFixed ")
+                        userWordHistory.learn(autoFixed)
                         composingWord.value = ""
                         previousWord.value = autoFixed.lowercase(Locale.ROOT)
                         return
                     }
+                }
+                if (currentWord.isNotBlank()) {
+                    userWordHistory.learn(currentWord)
                 }
                 commitText(" ")
                 composingWord.value = ""
@@ -390,6 +399,7 @@ class KeyboardInputMethodService : InputMethodService(),
         }
         ic.commitText("$cleanWord ", 1)
         undoStack.push("$cleanWord ")
+        userWordHistory.learn(cleanWord)
         composingWord.value = ""
         previousWord.value = cleanWord.lowercase(Locale.ROOT)
     }

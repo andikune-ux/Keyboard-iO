@@ -685,7 +685,6 @@ private fun CustomizationTab(
     val swipeTyping by preferences.swipeTyping.collectAsState()
     val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
     val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
-    val longPressDelay by preferences.longPressDelay.collectAsState()
     val context = LocalContext.current
     val audioFeedback = remember { KeyboardAudioFeedback(context) }
     DisposableEffect(Unit) {

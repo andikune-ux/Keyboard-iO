@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dev.andikune.keyboardio.model.AuroraWave
-import dev.andikune.keyboardio.model.KeyAction
 import dev.andikune.keyboardio.model.KeyItem
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.ui.theme.CyberBorder
