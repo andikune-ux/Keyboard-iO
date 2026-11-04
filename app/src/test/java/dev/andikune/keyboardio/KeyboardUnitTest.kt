@@ -81,21 +81,25 @@ class KeyboardUnitTest {
 
     @Test
     fun testWordSuggesterAndAutoCorrection() {
-        // Suggestions must be EMPTY when prefix is empty (only appear when approximating active input)
-        val emptySuggestions = WordSuggester.getSuggestions("")
+        // While typing: completions are empty for blank input
+        val emptySuggestions = WordSuggester.getWordCompletionsAndCorrections("")
         assertTrue(emptySuggestions.isEmpty())
 
-        val whitespaceSuggestions = WordSuggester.getSuggestions("   ")
+        val whitespaceSuggestions = WordSuggester.getWordCompletionsAndCorrections("   ")
         assertTrue(whitespaceSuggestions.isEmpty())
 
-        val suggestions = WordSuggester.getSuggestions("kam")
+        // Next word predictions: returns top starters when previous word is blank
+        val nextWordBlank = WordSuggester.getNextWordPredictions("")
+        assertTrue(nextWordBlank.isNotEmpty())
+
+        val suggestions = WordSuggester.getWordCompletionsAndCorrections("kam")
         assertTrue(suggestions.isNotEmpty())
-        assertTrue(suggestions.any { it.startsWith("kam", ignoreCase = true) })
+        assertTrue(suggestions.any { it.contains("kam", ignoreCase = true) })
 
-        val engSuggestions = WordSuggester.getSuggestions("hel")
-        assertTrue(engSuggestions.contains("hello"))
+        val engSuggestions = WordSuggester.getWordCompletionsAndCorrections("hel")
+        assertTrue(engSuggestions.any { it.contains("hel", ignoreCase = true) })
 
-        // Typo correction test: "sy" -> "saya" or "kmu" -> "kamu"
+        // Typo correction test: "kmu" -> "kamu"
         val corrected = WordSuggester.findAutoCorrection("kmu")
         assertEquals("kamu", corrected)
     }

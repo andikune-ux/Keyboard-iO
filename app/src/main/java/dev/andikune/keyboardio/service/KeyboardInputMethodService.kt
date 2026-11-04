@@ -30,7 +30,6 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
-import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -38,6 +37,7 @@ import dev.andikune.keyboardio.model.KeyboardEditorState
 import dev.andikune.keyboardio.ui.KeyboardScreen
 import dev.andikune.keyboardio.ui.theme.KeyboardIOTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.Locale
 import java.util.Stack
 
 class KeyboardInputMethodService : InputMethodService(),
@@ -57,10 +57,10 @@ class KeyboardInputMethodService : InputMethodService(),
         private set
     lateinit var clipboardRepo: ClipboardRepository
         private set
-    private lateinit var userWordHistory: UserWordHistory
 
     val editorState = MutableStateFlow(KeyboardEditorState())
     val composingWord = MutableStateFlow("")
+    val previousWord = MutableStateFlow("")
 
     private var audioManager: AudioManager? = null
     private var vibrator: Vibrator? = null
@@ -82,7 +82,6 @@ class KeyboardInputMethodService : InputMethodService(),
 
         preferences = KeyboardPreferences(applicationContext)
         clipboardRepo = ClipboardRepository(applicationContext)
-        userWordHistory = UserWordHistory(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         audioFeedback = KeyboardAudioFeedback(applicationContext)
         voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
@@ -132,7 +131,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         clipboardRepo = clipboardRepo,
                         editorStateFlow = editorState,
                         composingWordFlow = composingWord,
-                        learnedWordsFlow = userWordHistory.words,
+                        previousWordFlow = previousWord,
                         voiceInputManager = voiceInputManager,
                         audioFeedback = audioFeedback,
                         onKeyAction = { handleKeyAction(it) },
@@ -168,7 +167,6 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        UpdateService.check(this)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
@@ -207,6 +205,7 @@ class KeyboardInputMethodService : InputMethodService(),
             enterAction = enterAction
         )
         composingWord.value = ""
+        updatePreviousWord()
 
         if (!isPassword) {
             checkAndRecordClipboard()
@@ -268,7 +267,11 @@ class KeyboardInputMethodService : InputMethodService(),
                 if (undoStack.isNotEmpty()) {
                     undoStack.pop()
                 }
-                refreshComposingWord()
+                val curr = composingWord.value
+                if (curr.isNotEmpty()) {
+                    composingWord.value = curr.dropLast(1)
+                }
+                updatePreviousWord()
             }
             is KeyAction.SmartDeleteWord -> {
                 performSmartDeleteWord()
@@ -276,23 +279,22 @@ class KeyboardInputMethodService : InputMethodService(),
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
                 if (preferences.autoCorrection.value && currentWord.length >= 2) {
-                    val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
+                    val autoFixed = WordSuggester.findAutoCorrection(currentWord)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
                         ic.deleteSurroundingText(currentWord.length, 0)
                         ic.commitText("$autoFixed ", 1)
                         undoStack.push("$autoFixed ")
-                        userWordHistory.learn(autoFixed)
                         composingWord.value = ""
+                        previousWord.value = autoFixed.lowercase(Locale.ROOT)
                         return
                     }
                 }
-                userWordHistory.learn(currentWord)
                 commitText(" ")
                 composingWord.value = ""
+                updatePreviousWord()
             }
             is KeyAction.Enter -> {
-                userWordHistory.learn(composingWord.value)
                 val editorInfo = currentInputEditorInfo
                 val inputType = editorInfo?.inputType ?: 0
                 val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
@@ -340,7 +342,7 @@ class KeyboardInputMethodService : InputMethodService(),
         val deleteCount = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(textBefore)
         val count = if (deleteCount > 0) deleteCount else 1
         ic.deleteSurroundingText(count, 0)
-        refreshComposingWord()
+        composingWord.value = ""
     }
 
     private fun commitText(text: String) {
@@ -349,13 +351,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
         var toCommit = text
         // Smart Auto-Capitalization: Capitalize start of sentence if enabled
-        val inputType = currentInputEditorInfo?.inputType ?: 0
-        val fieldRequestsCapitalization = (inputType and (
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
-                        InputType.TYPE_TEXT_FLAG_CAP_WORDS or
-                        InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-                )) != 0
-        if (preferences.autoCapitalize.value && fieldRequestsCapitalization &&
+        if (preferences.autoCapitalize.value &&
             text.length == 1 &&
             text[0].isLetter() &&
             composingWord.value.isEmpty()
@@ -377,23 +373,34 @@ class KeyboardInputMethodService : InputMethodService(),
         undoStack.push(toCommit)
 
         if (toCommit.length == 1 && toCommit[0].isLetter()) {
-            refreshComposingWord()
+            composingWord.value += toCommit
         } else {
             composingWord.value = ""
+            updatePreviousWord()
         }
     }
 
     private fun handleSuggestionPicked(word: String) {
         provideFeedback()
         val ic = currentInputConnection ?: return
+        val cleanWord = word.trim('"', ' ')
         val currentPrefixLen = composingWord.value.length
         if (currentPrefixLen > 0) {
             ic.deleteSurroundingText(currentPrefixLen, 0)
         }
-        ic.commitText("$word ", 1)
-        undoStack.push("$word ")
-        userWordHistory.learn(word)
+        ic.commitText("$cleanWord ", 1)
+        undoStack.push("$cleanWord ")
         composingWord.value = ""
+        previousWord.value = cleanWord.lowercase(Locale.ROOT)
+    }
+
+    private fun updatePreviousWord() {
+        val ic = currentInputConnection ?: return
+        val textBefore = ic.getTextBeforeCursor(60, 0)?.toString() ?: ""
+        val trimmed = textBefore.trimEnd()
+        val lastWord = trimmed.substringAfterLast(' ', "").substringAfterLast('\n', "")
+            .filter { it.isLetter() }
+        previousWord.value = lastWord.lowercase(Locale.ROOT)
     }
 
     private fun performUndo() {
@@ -405,12 +412,7 @@ class KeyboardInputMethodService : InputMethodService(),
         } else {
             ic.deleteSurroundingText(1, 0)
         }
-        refreshComposingWord()
-    }
-
-    private fun refreshComposingWord() {
-        val beforeCursor = currentInputConnection?.getTextBeforeCursor(64, 0)?.toString().orEmpty()
-        composingWord.value = beforeCursor.takeLastWhile { it.isLetter() || it == '\'' }
+        composingWord.value = ""
     }
 
     private fun provideFeedback() {
