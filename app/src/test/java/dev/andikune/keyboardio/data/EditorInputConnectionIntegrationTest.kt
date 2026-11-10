@@ -3,6 +3,9 @@ package dev.andikune.keyboardio.data
 import android.text.Selection
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.InputConnection
+import android.widget.TextView
+import androidx.test.core.app.ApplicationProvider
+import android.content.Context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -17,8 +20,8 @@ import java.lang.reflect.Proxy
 @Config(sdk = [28])
 class EditorInputConnectionIntegrationTest {
     @Test fun readsWordAndPunctuationFromRealBaseInputConnectionCursor() {
-        val connection = BaseInputConnection(null, true)
-        val editable = connection.editable
+        val connection = BaseInputConnection(TextView(ApplicationProvider.getApplicationContext<Context>()), true)
+        val editable = connection.editable ?: error("BaseInputConnection did not expose its editable buffer")
         editable.append("hello wor, next")
         Selection.setSelection(editable, 9)
 
@@ -30,8 +33,8 @@ class EditorInputConnectionIntegrationTest {
     }
 
     @Test fun cursorMovementChangesTheResolvedWordContext() {
-        val connection = BaseInputConnection(null, true)
-        val editable = connection.editable
+        val connection = BaseInputConnection(TextView(ApplicationProvider.getApplicationContext<Context>()), true)
+        val editable = connection.editable ?: error("BaseInputConnection did not expose its editable buffer")
         editable.append("hello world")
         Selection.setSelection(editable, 8)
 
@@ -42,8 +45,8 @@ class EditorInputConnectionIntegrationTest {
     }
 
     @Test fun activeSelectionDisablesComposingContext() {
-        val connection = BaseInputConnection(null, true)
-        val editable = connection.editable
+        val connection = BaseInputConnection(TextView(ApplicationProvider.getApplicationContext<Context>()), true)
+        val editable = connection.editable ?: error("BaseInputConnection did not expose its editable buffer")
         editable.append("hello world")
         Selection.setSelection(editable, 6, 11)
 
