@@ -161,6 +161,9 @@ class KeyboardPreferences(context: Context) {
 
     private fun loadAutoCorrection(): Boolean = prefs.getBoolean("auto_correction", true)
 
+    /** Read persisted value directly so an IME instance observes changes made in Settings. */
+    fun isAutoCorrectionEnabled(): Boolean = prefs.getBoolean("auto_correction", true)
+
     fun setSwipeTyping(enabled: Boolean) {
         prefs.edit().putBoolean("swipe_typing", enabled).apply()
         _swipeTyping.value = enabled

@@ -360,6 +360,34 @@ object WordSuggester {
     }
 
     /**
+     * Resolve a traced QWERTY path to a dictionary/learned word.
+     * A result is returned only when the geometric spelling is sufficiently close.
+     */
+    fun getSwipeSuggestion(path: String, learnedWords: Map<String, Int> = emptyMap()): String? {
+        val normalized = path.lowercase(Locale.ROOT).filter { it in 'a'..'z' }
+        if (normalized.length < 3 || normalized.length > 18) return null
+        val pool = (FREQUENT_WORDS + learnedWords.map { (word, count) ->
+            WordEntry(word.lowercase(Locale.ROOT), 100 + count.coerceAtMost(1000))
+        }).distinctBy { it.word.lowercase(Locale.ROOT) }
+        val ranked = pool.asSequence()
+            .filter { kotlin.math.abs(it.word.length - normalized.length) <= 3 }
+            .map { entry ->
+                val candidate = entry.word.lowercase(Locale.ROOT)
+                val normalizedDistance = calculateSpatialEditDistance(normalized, candidate) /
+                    maxOf(normalized.length, candidate.length).toDouble()
+                val learnedBoost = (learnedWords[candidate] ?: 0).coerceAtMost(500) / 10000.0
+                Triple(candidate, normalizedDistance - learnedBoost, normalizedDistance)
+            }
+            .filter { it.third <= 0.34 }
+            .sortedBy { it.second }
+            .toList()
+        val best = ranked.firstOrNull() ?: return null
+        val second = ranked.getOrNull(1)
+        if (second != null && second.second - best.second < 0.025 && best.third > 0.02) return null
+        return best.first
+    }
+
+    /**
      * Strict Auto-Correction logic executed when user taps Spacebar:
      * - NEVER autocorrect a word that is already valid or recognized (in dictionary or learned words).
      * - NEVER autocorrect words shorter than 3 characters.

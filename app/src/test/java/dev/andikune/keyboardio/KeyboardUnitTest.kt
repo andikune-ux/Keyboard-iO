@@ -106,6 +106,7 @@ class KeyboardUnitTest {
         assertEquals("kamu", corrected)
         assertEquals(null, WordSuggester.findAutoCorrection("keyboard", mapOf("keyboard" to 20)))
         assertEquals(null, WordSuggester.findAutoCorrection("Andi"))
+        assertEquals("kamu", WordSuggester.getSwipeSuggestion("kamu"))
     }
 
     @Test

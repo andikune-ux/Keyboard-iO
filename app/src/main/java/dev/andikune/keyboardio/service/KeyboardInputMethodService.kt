@@ -220,6 +220,7 @@ class KeyboardInputMethodService : InputMethodService(),
             enterAction = enterAction
         )
         composingWord.value = ""
+        undoStack.clear()
         updatePreviousWord()
 
         // Reset and begin tracking new typing session
@@ -309,7 +310,7 @@ class KeyboardInputMethodService : InputMethodService(),
             }
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
-                if (preferences.autoCorrection.value && currentWord.length >= 2) {
+                if (preferences.isAutoCorrectionEnabled() && currentWord.length >= 3) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
