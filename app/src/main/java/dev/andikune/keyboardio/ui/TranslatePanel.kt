@@ -63,6 +63,7 @@ fun TranslatePanel(
     val translatedText = remember(sourceText, isIdToEn) {
         OfflineTranslator.translate(sourceText, isIdToEn)
     }
+    val canInsertTranslation = OfflineTranslator.hasMeaningfulTranslation(sourceText, translatedText)
 
     Column(
         modifier = modifier
@@ -182,7 +183,7 @@ fun TranslatePanel(
                 modifier = Modifier.weight(1f)
             )
 
-            if (translatedText.isNotEmpty()) {
+            if (canInsertTranslation) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = {

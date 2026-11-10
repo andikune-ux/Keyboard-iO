@@ -269,9 +269,10 @@ fun KeyboardScreen(
                     updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
                 }
                 is KeyAction.Enter -> {
-                    val textToInsert = translateResultText.ifBlank { translateSourceText }
-                    if (textToInsert.isNotBlank()) {
-                        onPasteText(textToInsert)
+                    // Never silently paste the source text when the local dictionary
+                    // cannot translate it. The user must explicitly see a real result.
+                    if (OfflineTranslator.hasMeaningfulTranslation(translateSourceText, translateResultText)) {
+                        onPasteText(translateResultText)
                         updateTranslateSource("")
                     }
                 }
@@ -564,8 +565,12 @@ fun KeyboardScreen(
                     activePanel = if (activePanel == ActivePanel.EMOJI) ActivePanel.NONE else ActivePanel.EMOJI
                 },
                 onOpenTranslate = {
-                    isTranslateMode = !isTranslateMode
-                    if (!isTranslateMode) updateTranslateSource("")
+                    if (isTranslateMode) {
+                        updateTranslateSource("")
+                        isTranslateMode = false
+                    } else {
+                        isTranslateMode = true
+                    }
                     if (activePanel == ActivePanel.TRANSLATE) activePanel = ActivePanel.NONE
                 },
                 onOpenNicknameFont = {
@@ -587,8 +592,10 @@ fun KeyboardScreen(
                     onSwitchLanguage = { isIdToEn = !isIdToEn },
                     onClearText = { updateTranslateSource("") },
                     onInsertTranslation = { text ->
-                        onPasteText(text)
-                        updateTranslateSource("")
+                        if (OfflineTranslator.hasMeaningfulTranslation(translateSourceText, text)) {
+                            onPasteText(text)
+                            updateTranslateSource("")
+                        }
                     },
                     onPasteFromClipboard = {
                         val clip = clipboardItems.firstOrNull()?.text

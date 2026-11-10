@@ -63,6 +63,8 @@ fun TranslateBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val canInsertTranslation = OfflineTranslator.hasMeaningfulTranslation(sourceText, translatedText)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -215,14 +217,11 @@ fun TranslateBar(
 
                 Button(
                     onClick = {
-                        if (translatedText.isNotEmpty()) {
-                            onInsertTranslation(translatedText)
-                        } else if (sourceText.isNotEmpty()) {
-                            onInsertTranslation(sourceText)
-                        }
+                        if (canInsertTranslation) onInsertTranslation(translatedText)
                     },
+                    enabled = canInsertTranslation,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (translatedText.isNotEmpty()) rgbTheme.primary else CyberCard
+                        containerColor = if (canInsertTranslation) rgbTheme.primary else CyberCard
                     ),
                     shape = RoundedCornerShape(6.dp),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -231,13 +230,13 @@ fun TranslateBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = null,
-                        tint = if (translatedText.isNotEmpty()) CyberBlack else TextTertiary,
+                        tint = if (canInsertTranslation) CyberBlack else TextTertiary,
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Tempel",
-                        color = if (translatedText.isNotEmpty()) CyberBlack else TextTertiary,
+                        color = if (canInsertTranslation) CyberBlack else TextTertiary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

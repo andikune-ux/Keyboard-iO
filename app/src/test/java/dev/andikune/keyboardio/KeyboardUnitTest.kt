@@ -187,6 +187,22 @@ class KeyboardUnitTest {
     }
 
     @Test
+    fun offlineTranslationRequiresARealDictionaryChangeBeforeInsert() {
+        val unknown = "qwerty zxv"
+        val unknownResult = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(unknown)
+        assertEquals(unknown, unknownResult)
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation(unknown, unknownResult))
+
+        val known = "selamat pagi"
+        val knownResult = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(known)
+        assertEquals("good morning", knownResult.lowercase())
+        assertTrue(dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation(known, knownResult))
+
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation("", ""))
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation("HELLO", "hello"))
+    }
+
+    @Test
     fun testOfflineTranslator() {
         val translatedEn = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn("Selamat pagi")
         assertTrue(translatedEn.equals("Good morning", ignoreCase = true))

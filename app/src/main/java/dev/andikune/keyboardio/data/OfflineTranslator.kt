@@ -306,6 +306,14 @@ object OfflineTranslator {
         }
     }
 
+    /**
+     * True only when the offline dictionary changed the source beyond casing.
+     * Prevents the keyboard from presenting untranslated input as a translation.
+     */
+    fun hasMeaningfulTranslation(source: String, translated: String): Boolean =
+        source.isNotBlank() && translated.isNotBlank() &&
+            !source.trim().equals(translated.trim(), ignoreCase = true)
+
     fun translateIdToEn(text: String): String = translate(text, true)
     fun translateEnToId(text: String): String = translate(text, false)
 
