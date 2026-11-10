@@ -24,3 +24,29 @@ object ClipboardCapturePolicy {
     fun shouldCapture(isPasswordInput: Boolean, privateModeEnabled: Boolean): Boolean =
         !isPasswordInput && !privateModeEnabled
 }
+
+/** Separates showing useful suggestions from silently changing text in the editor. */
+data class EditorInputCapabilities(
+    val suggestionsAllowed: Boolean,
+    val autoCorrectionAllowed: Boolean
+)
+
+object EditorInputTypePolicy {
+    fun resolve(inputType: Int): EditorInputCapabilities {
+        val isText = inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        val unsupportedVariation = variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS ||
+            variation == InputType.TYPE_TEXT_VARIATION_URI ||
+            variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+            variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD
+        val suggestionsAllowed = isText &&
+            !unsupportedVariation &&
+            !TypingInputPrivacy.isPasswordInputType(inputType) &&
+            (inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) == 0
+        val autoCorrectionAllowed = suggestionsAllowed &&
+            (inputType and InputType.TYPE_TEXT_FLAG_AUTO_CORRECT) != 0
+        return EditorInputCapabilities(suggestionsAllowed, autoCorrectionAllowed)
+    }
+}
