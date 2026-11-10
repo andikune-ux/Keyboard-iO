@@ -16,16 +16,28 @@ class KeyboardPreferences(context: Context) {
 
     init {
         val settingsVersion = prefs.getInt("custom_bg_settings_version", 0)
+        val editor = prefs.edit()
         if (settingsVersion < 2) {
-            val editor = prefs.edit()
             if (prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f) {
                 editor.putFloat("custom_bg_opacity", 0.92f)
             }
             if (prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f) {
                 editor.putFloat("custom_bg_dim", 0.10f)
             }
-            editor.putInt("custom_bg_settings_version", 2).apply()
         }
+        if (settingsVersion < 3) {
+            val previousOpacity = if (
+                settingsVersion < 2 && prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f
+            ) 0.92f else prefs.getFloat("custom_bg_opacity", 1f)
+            val previousDim = if (
+                settingsVersion < 2 && prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f
+            ) 0.10f else prefs.getFloat("custom_bg_dim", 0f)
+            if (previousOpacity == 0.92f && previousDim == 0.10f) {
+                editor.putFloat("custom_bg_opacity", 1f)
+                editor.putFloat("custom_bg_dim", 0f)
+            }
+        }
+        editor.putInt("custom_bg_settings_version", 3).apply()
     }
 
     private val _theme = MutableStateFlow(loadTheme())
@@ -212,11 +224,11 @@ class KeyboardPreferences(context: Context) {
     private val _customBgDim = MutableStateFlow(loadCustomBgDim())
     val customBgDim: StateFlow<Float> = _customBgDim.asStateFlow()
 
-    fun setCustomBackground(type: String, path: String, opacity: Float = 0.92f, dim: Float = 0.10f) {
+    fun setCustomBackground(type: String, path: String, opacity: Float = 1f, dim: Float = 0f) {
         prefs.edit()
             .putString("custom_bg_type", type)
             .putString("custom_bg_path", path)
-            .putFloat("custom_bg_opacity", opacity.coerceIn(0.1f, 1f))
+            .putFloat("custom_bg_opacity", opacity.coerceIn(0f, 1f))
             .putFloat("custom_bg_dim", dim.coerceIn(0f, 0.75f))
             .apply()
         _customBgType.value = type
@@ -248,6 +260,6 @@ class KeyboardPreferences(context: Context) {
 
     private fun loadCustomBgType(): String = prefs.getString("custom_bg_type", "NONE") ?: "NONE"
     private fun loadCustomBgPath(): String = prefs.getString("custom_bg_path", "") ?: ""
-    private fun loadCustomBgOpacity(): Float = prefs.getFloat("custom_bg_opacity", 0.92f).coerceIn(0.1f, 1f)
-    private fun loadCustomBgDim(): Float = prefs.getFloat("custom_bg_dim", 0.10f).coerceIn(0f, 0.75f)
+    private fun loadCustomBgOpacity(): Float = prefs.getFloat("custom_bg_opacity", 1f).coerceIn(0f, 1f)
+    private fun loadCustomBgDim(): Float = prefs.getFloat("custom_bg_dim", 0f).coerceIn(0f, 0.75f)
 }

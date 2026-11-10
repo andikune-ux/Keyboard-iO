@@ -24,8 +24,8 @@ class KeyboardPreferencesTest {
     @Test
     fun newInstallUsesVisibleWallpaperDefaults() {
         val preferences = KeyboardPreferences(context)
-        assertEquals(0.92f, preferences.customBgOpacity.value, 0.001f)
-        assertEquals(0.10f, preferences.customBgDim.value, 0.001f)
+        assertEquals(1f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0f, preferences.customBgDim.value, 0.001f)
     }
 
     @Test
@@ -37,8 +37,8 @@ class KeyboardPreferencesTest {
             .commit()
 
         val preferences = KeyboardPreferences(context)
-        assertEquals(0.92f, preferences.customBgOpacity.value, 0.001f)
-        assertEquals(0.10f, preferences.customBgDim.value, 0.001f)
+        assertEquals(1f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0f, preferences.customBgDim.value, 0.001f)
     }
 
     @Test
@@ -63,4 +63,27 @@ class KeyboardPreferencesTest {
         val restored = KeyboardPreferences(context)
         assertEquals(0.75f, restored.customBgDim.value, 0.001f)
     }
+    @Test
+    fun allowsFullyTransparentWallpaperAndPersistsIt() {
+        val preferences = KeyboardPreferences(context)
+        preferences.setCustomBgOpacity(0f)
+
+        assertEquals(0f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0f, KeyboardPreferences(context).customBgOpacity.value, 0.001f)
+    }
+
+    @Test
+    fun migratesPreviouslySuggestedDefaultsToBrighterWallpaper() {
+        context.getSharedPreferences("keyboard_io_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("custom_bg_settings_version", 2)
+            .putFloat("custom_bg_opacity", 0.92f)
+            .putFloat("custom_bg_dim", 0.10f)
+            .commit()
+
+        val preferences = KeyboardPreferences(context)
+        assertEquals(1f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0f, preferences.customBgDim.value, 0.001f)
+    }
+
 }

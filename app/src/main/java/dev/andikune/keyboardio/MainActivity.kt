@@ -742,8 +742,8 @@ private fun CustomizationTab(
                     preferences.setCustomBackground(
                         type = if (isVideo) "VIDEO" else "IMAGE",
                         path = destFile.absolutePath,
-                        opacity = 0.92f,
-                        dim = 0.10f
+                        opacity = 1f,
+                        dim = 0f
                     )
                 }.onFailure {
                     File(context.filesDir, "custom_keyboard_bg.jpg.tmp").delete()
@@ -941,14 +941,14 @@ private fun CustomizationTab(
                         Slider(
                             value = customBgOpacity,
                             onValueChange = { preferences.setCustomBgOpacity(it) },
-                            valueRange = 0.1f..1.0f,
+                            valueRange = 0.0f..1.0f,
                             colors = SliderDefaults.colors(
                                 thumbColor = rgbTheme.primary,
                                 activeTrackColor = rgbTheme.primary
                             )
                         )
                         Text(
-                            text = "100% = media terlihat penuh. Turunkan jika ingin lebih transparan.",
+                            text = "100% = media terlihat penuh; 0% = media tidak terlihat.",
                             color = TextTertiary,
                             fontSize = 10.sp
                         )
@@ -990,8 +990,8 @@ private fun CustomizationTab(
                             ) { Text("Terang", fontSize = 10.sp) }
                             Button(
                                 onClick = {
-                                    preferences.setCustomBgOpacity(0.92f)
-                                    preferences.setCustomBgDim(0.10f)
+                                    preferences.setCustomBgOpacity(0.95f)
+                                    preferences.setCustomBgDim(0.03f)
                                 },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
@@ -999,8 +999,8 @@ private fun CustomizationTab(
                             ) { Text("Seimbang", fontSize = 10.sp) }
                             Button(
                                 onClick = {
-                                    preferences.setCustomBgOpacity(0.80f)
-                                    preferences.setCustomBgDim(0.25f)
+                                    preferences.setCustomBgOpacity(0.85f)
+                                    preferences.setCustomBgDim(0.18f)
                                 },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
