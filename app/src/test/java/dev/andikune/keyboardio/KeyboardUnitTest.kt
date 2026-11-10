@@ -152,6 +152,24 @@ class KeyboardUnitTest {
     }
 
     @Test
+    fun testTypingSessionRecordStoresFullUnicodeTextAndTimes() {
+        val text = "Halo 😀\\nIni seluruh teks yang diketik."
+        val start = 1_800_000_000_000L
+        val end = start + 95_000L
+        val session = dev.andikune.keyboardio.data.TypingSessionRecord(
+            startedAt = start,
+            endedAt = end,
+            createdAt = end,
+            text = text
+        )
+        assertEquals(text, session.text)
+        assertEquals(start, session.startedAt)
+        assertEquals(end, session.endedAt)
+        assertEquals(text.codePointCount(0, text.length), session.charCount)
+        assertEquals(95_000L, session.durationMs)
+    }
+
+    @Test
     fun testOfflineTranslator() {
         val translatedEn = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn("Selamat pagi")
         assertTrue(translatedEn.equals("Good morning", ignoreCase = true))

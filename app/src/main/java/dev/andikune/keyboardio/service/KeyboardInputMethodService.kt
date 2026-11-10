@@ -78,6 +78,7 @@ class KeyboardInputMethodService : InputMethodService(),
     // Full text buffer for the visible keyboard session.
     private var sessionStartTime: Long = 0L
     private var sessionActive = false
+    private var sessionCaptureAllowed = true
     private val sessionText = StringBuilder()
 
     private data class UndoOperation(val deletedText: String, val insertedText: String, val expectedTail: String)
@@ -247,6 +248,7 @@ class KeyboardInputMethodService : InputMethodService(),
         finishTypingSession()
         sessionStartTime = System.currentTimeMillis()
         sessionText.setLength(0)
+        sessionCaptureAllowed = !isPassword
         sessionActive = true
 
         if (!isPassword) {
@@ -472,9 +474,6 @@ class KeyboardInputMethodService : InputMethodService(),
         recordUndo(currentPrefix, inserted)
         userWordHistory.learn(cleanWord, previousWord.value)
 
-        sessionCharCount += cleanWord.length + 1
-        sessionWordCount++
-
         composingWord.value = ""
         previousWord.value = cleanWord.substringAfterLast(' ').lowercase(Locale.ROOT)
     }
@@ -528,7 +527,7 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun appendToSession(text: String) {
-        if (sessionActive && text.isNotEmpty()) sessionText.append(text)
+        if (sessionActive && sessionCaptureAllowed && text.isNotEmpty()) sessionText.append(text)
     }
 
     private fun removeFromSessionSuffix(text: String) {
