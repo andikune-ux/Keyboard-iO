@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -423,21 +424,27 @@ fun KeyboardScreen(
             if (bgFile.exists() && bgFile.canRead()) {
                 Box(modifier = Modifier.matchParentSize()) {
                     if (customBgType == "IMAGE") {
-                        val bitmap = remember(customBgPath) {
-                            runCatching {
-                                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                                BitmapFactory.decodeFile(customBgPath, opts)
-                                var sampleSize = 1
-                                val largestDimension = maxOf(opts.outWidth, opts.outHeight)
-                                while (largestDimension > 1280 * sampleSize) {
-                                    sampleSize *= 2
-                                }
-                                val decodeOpts = BitmapFactory.Options().apply {
-                                    inSampleSize = sampleSize
-                                    inPreferredConfig = Bitmap.Config.RGB_565
-                                }
-                                BitmapFactory.decodeFile(customBgPath, decodeOpts)
-                            }.getOrNull()
+                        // Decode on IO so large gallery images never block keyboard composition.
+                        val bitmap by produceState<Bitmap?>(initialValue = null, customBgPath) {
+                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching {
+                                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeFile(customBgPath, opts)
+                                    if (opts.outWidth <= 0 || opts.outHeight <= 0) {
+                                        return@runCatching null
+                                    }
+                                    var sampleSize = 1
+                                    val largestDimension = maxOf(opts.outWidth, opts.outHeight)
+                                    while (largestDimension > 1280 * sampleSize) {
+                                        sampleSize *= 2
+                                    }
+                                    val decodeOpts = BitmapFactory.Options().apply {
+                                        inSampleSize = sampleSize
+                                        inPreferredConfig = Bitmap.Config.RGB_565
+                                    }
+                                    BitmapFactory.decodeFile(customBgPath, decodeOpts)
+                                }.getOrNull()
+                            }
                         }
                         if (bitmap != null) {
                             Image(
