@@ -244,12 +244,15 @@ class KeyboardInputMethodService : InputMethodService(),
         undoStack.clear()
         updatePreviousWord()
 
-        // Close a previous view if Android restarts the input view without finishing it.
-        finishTypingSession()
-        sessionStartTime = System.currentTimeMillis()
-        sessionText.setLength(0)
+        // Start timing only when a new visible keyboard session begins.
+        // Input-view restarts and editor changes must not split one visible session.
+        if (!sessionActive) {
+            sessionStartTime = System.currentTimeMillis()
+            sessionText.setLength(0)
+            sessionActive = true
+        }
+        // Never retain password-field content, even if the editor changes mid-session.
         sessionCaptureAllowed = !isPassword
-        sessionActive = true
 
         if (!isPassword) {
             checkAndRecordClipboard()
@@ -324,16 +327,18 @@ class KeyboardInputMethodService : InputMethodService(),
             is KeyAction.Backspace -> {
                 val selected = ic.getSelectedText(0)?.toString().orEmpty()
                 if (selected.isNotEmpty()) {
-                    ic.commitText("", 1)
-                    removeFromSessionSuffix(selected)
-                    recordUndo(selected, "")
+                    if (ic.commitText("", 1)) {
+                        removeFromSessionSuffix(selected)
+                        recordUndo(selected, "")
+                    }
                 } else {
                     val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
                     if (before.isNotEmpty()) {
                         val removed = String(Character.toChars(Character.codePointBefore(before, before.length)))
-                        ic.deleteSurroundingTextInCodePoints(1, 0)
-                        removeLastCodePointFromSession()
-                        recordUndo(removed, "")
+                        if (ic.deleteSurroundingTextInCodePoints(1, 0)) {
+                            removeFromSessionSuffix(removed)
+                            recordUndo(removed, "")
+                        }
                     }
                 }
                 syncComposingWordFromEditor()
@@ -352,14 +357,17 @@ class KeyboardInputMethodService : InputMethodService(),
                             syncComposingWordFromEditor()
                             return
                         }
-                        ic.deleteSurroundingTextInCodePoints(currentWord.codePointCount(0, currentWord.length), 0)
+                        val deleted = ic.deleteSurroundingTextInCodePoints(
+                            currentWord.codePointCount(0, currentWord.length), 0
+                        )
                         val replacement = "$autoFixed "
-                        ic.commitText(replacement, 1)
-                        replaceSessionSuffix(currentWord, replacement)
-                        recordUndo(currentWord, replacement)
-                        userWordHistory.learn(autoFixed, previousWord.value)
-                        composingWord.value = ""
-                        previousWord.value = autoFixed.lowercase(Locale.ROOT)
+                        if (deleted && ic.commitText(replacement, 1)) {
+                            replaceSessionSuffix(currentWord, replacement)
+                            recordUndo(currentWord, replacement)
+                            userWordHistory.learn(autoFixed, previousWord.value)
+                            composingWord.value = ""
+                            previousWord.value = autoFixed.lowercase(Locale.ROOT)
+                        }
                         return
                     }
                 }
@@ -420,9 +428,10 @@ class KeyboardInputMethodService : InputMethodService(),
         if (deleteCount > 0) {
             val start = textBefore.offsetByCodePoints(textBefore.length, -deleteCount)
             val deleted = textBefore.substring(start)
-            ic.deleteSurroundingTextInCodePoints(deleteCount, 0)
-            removeFromSessionSuffix(deleted)
-            recordUndo(deleted, "")
+            if (ic.deleteSurroundingTextInCodePoints(deleteCount, 0)) {
+                removeFromSessionSuffix(deleted)
+                recordUndo(deleted, "")
+            }
         }
         syncComposingWordFromEditor()
     }
@@ -451,8 +460,10 @@ class KeyboardInputMethodService : InputMethodService(),
             }
         }
 
-        if (ic.commitText(toCommit, 1)) appendToSession(toCommit)
-        recordUndo("", toCommit)
+        if (ic.commitText(toCommit, 1)) {
+            appendToSession(toCommit)
+            recordUndo("", toCommit)
+        }
 
         // The editor's actual cursor/text is the source of truth; this also handles
         // selection changes, emoji, pasted text, and editor-side replacements.
@@ -464,15 +475,15 @@ class KeyboardInputMethodService : InputMethodService(),
         val ic = currentInputConnection ?: return
         val cleanWord = word.trim('"', ' ')
         val currentPrefix = composingWord.value
-        if (currentPrefix.isNotEmpty()) {
+        val deletedPrefix = currentPrefix.isNotEmpty() &&
             ic.deleteSurroundingTextInCodePoints(currentPrefix.codePointCount(0, currentPrefix.length), 0)
-            removeFromSessionSuffix(currentPrefix)
-        }
         val inserted = "$cleanWord "
-        ic.commitText(inserted, 1)
-        appendToSession(inserted)
-        recordUndo(currentPrefix, inserted)
-        userWordHistory.learn(cleanWord, previousWord.value)
+        if (ic.commitText(inserted, 1)) {
+            if (deletedPrefix) removeFromSessionSuffix(currentPrefix)
+            appendToSession(inserted)
+            recordUndo(if (deletedPrefix) currentPrefix else "", inserted)
+            userWordHistory.learn(cleanWord, previousWord.value)
+        }
 
         composingWord.value = ""
         previousWord.value = cleanWord.substringAfterLast(' ').lowercase(Locale.ROOT)
@@ -538,11 +549,6 @@ class KeyboardInputMethodService : InputMethodService(),
     private fun replaceSessionSuffix(oldText: String, newText: String) {
         removeFromSessionSuffix(oldText)
         appendToSession(newText)
-    }
-
-    private fun removeLastCodePointFromSession() {
-        if (!sessionActive || sessionText.isEmpty()) return
-        sessionText.setLength(sessionText.offsetByCodePoints(sessionText.length, -1))
     }
 
     private fun finishTypingSession() {

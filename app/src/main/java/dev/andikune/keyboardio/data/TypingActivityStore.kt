@@ -128,7 +128,7 @@ class TypingActivityStore(context: Context) {
     }
 
     private fun prune(records: List<TypingSessionRecord>, now: Long): List<TypingSessionRecord> =
-        records.filter { now >= it.createdAt && now - it.createdAt < RETENTION_MS }
+        records.filter { now - it.createdAt < RETENTION_MS }
             .sortedByDescending { it.createdAt }
 
     private fun saveSessions(records: List<TypingSessionRecord>) {

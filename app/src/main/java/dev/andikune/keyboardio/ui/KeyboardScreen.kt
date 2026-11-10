@@ -117,6 +117,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import dev.andikune.keyboardio.MainActivity
 import dev.andikune.keyboardio.data.TypingActivityStats
 import dev.andikune.keyboardio.data.TypingActivityStore
+import dev.andikune.keyboardio.data.TypingSessionRecord
 import java.io.File
 import dev.andikune.keyboardio.service.VoiceInputManager
 import dev.andikune.keyboardio.ui.theme.CyberBlack
@@ -169,6 +170,13 @@ fun KeyboardScreen(
     val customBgDim by preferences.customBgDim.collectAsState()
 
     val clipboardItems by clipboardRepo.items.collectAsState()
+    val typingSessions by (
+        typingActivityStore?.sessions?.collectAsState()
+            ?: remember { mutableStateOf(emptyList<TypingSessionRecord>()) }
+        )
+    val typingStats = remember(typingSessions) {
+        typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
+    }
     val editorState by editorStateFlow.collectAsState()
     val composingWord by composingWordFlow.collectAsState()
     val previousWord by (previousWordFlow?.collectAsState() ?: remember { mutableStateOf("") })
@@ -616,9 +624,8 @@ fun KeyboardScreen(
                         )
                     }
                     ActivePanel.TYPING_ACTIVITY -> {
-                        val stats = typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
                         TypingActivityPanel(
-                            stats = stats,
+                            stats = typingStats,
                             rgbTheme = rgbTheme,
                             onClearHistory = { typingActivityStore?.clearAll() },
                             onClose = { activePanel = ActivePanel.NONE }

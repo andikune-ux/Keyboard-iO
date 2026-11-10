@@ -153,7 +153,7 @@ class KeyboardUnitTest {
 
     @Test
     fun testTypingSessionRecordStoresFullUnicodeTextAndTimes() {
-        val text = "Halo 😀\\nIni seluruh teks yang diketik."
+        val text = "Halo 😀\nIni seluruh teks yang diketik."
         val start = 1_800_000_000_000L
         val end = start + 95_000L
         val session = dev.andikune.keyboardio.data.TypingSessionRecord(
