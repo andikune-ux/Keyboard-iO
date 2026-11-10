@@ -1176,7 +1176,7 @@ private fun TopHeaderBar(
                     fontWeight = FontWeight.Bold
                 )
             }
-        } else if (clipboardSuggestion != null) {
+        } else if (clipboardSuggestion != null && !isToolsOpen) {
             // Saran Tempel Hasil Salin (Gboard clipboard chip with one-time dismiss)
             Row(
                 modifier = Modifier
@@ -1228,7 +1228,7 @@ private fun TopHeaderBar(
                     )
                 }
             }
-        } else if (suggestions.isNotEmpty()) {
+        } else if (suggestions.isNotEmpty() && !isToolsOpen) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1270,7 +1270,7 @@ private fun TopHeaderBar(
         // Group Right: Single Door Toggle Button ("Tombol Pintu Buka Tutup")
         // Triggers showing / hiding secondary tools (Terjemahan, Font Unik, Clipboard, Kembali/Undo)
         Row(
-            modifier = Modifier.widthIn(max = 216.dp).horizontalScroll(rememberScrollState()),
+            modifier = Modifier.widthIn(max = 168.dp).horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
         ) {
