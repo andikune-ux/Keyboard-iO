@@ -801,6 +801,20 @@ private fun CustomizationTab(
                         opacity = 1f,
                         dim = 0f
                     )
+
+                    // Keep replaced media briefly so an IME renderer finishing its
+                    // transition can release the old file before it is deleted.
+                    val cleanupBefore = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+                    context.filesDir.listFiles()
+                        ?.filter { candidate ->
+                            candidate.isFile &&
+                                candidate.name.startsWith("custom_keyboard_bg_") &&
+                                candidate.extension in setOf("img", "mp4") &&
+                                candidate.absolutePath != destFile.absolutePath &&
+                                candidate.lastModified() < cleanupBefore
+                        }
+                        ?.forEach { candidate -> candidate.delete() }
+
                     pendingTempFile = null
                     pendingDestinationFile = null
                 }.onFailure {
