@@ -37,7 +37,7 @@ class VoiceInputManager(
             return
         }
 
-        stopListening()
+        cancelListening()
         _errorMessage.value = null
         _liveSpokenText.value = ""
 
@@ -70,6 +70,7 @@ class VoiceInputManager(
                             else -> "Gagal mendeteksi suara"
                         }
                         _errorMessage.value = msg
+                        releaseRecognizer()
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -80,6 +81,7 @@ class VoiceInputManager(
                             _liveSpokenText.value = text
                             onResult(text)
                         }
+                        releaseRecognizer()
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
@@ -95,8 +97,9 @@ class VoiceInputManager(
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "id-ID")
+                val deviceLanguage = Locale.getDefault().toLanguageTag().ifBlank { "id-ID" }
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, deviceLanguage)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, deviceLanguage)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             }
@@ -108,17 +111,36 @@ class VoiceInputManager(
         }
     }
 
+    /** Stop capture and allow SpeechRecognizer to deliver its final onResults callback. */
     fun stopListening() {
         try {
             speechRecognizer?.stopListening()
-            speechRecognizer?.cancel()
-            speechRecognizer?.destroy()
-            speechRecognizer = null
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            releaseRecognizer()
+        }
         _isListening.value = false
     }
 
+    /** Cancel recognition when the user dismisses the voice panel or starts a new session. */
+    fun cancelListening() {
+        try {
+            speechRecognizer?.cancel()
+        } catch (_: Exception) {
+        }
+        releaseRecognizer()
+    }
+
+    private fun releaseRecognizer() {
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
+        speechRecognizer = null
+        _isListening.value = false
+        _rmsVolume.value = 0f
+    }
+
     fun destroy() {
-        stopListening()
+        cancelListening()
     }
 }

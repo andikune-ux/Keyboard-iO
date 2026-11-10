@@ -99,9 +99,13 @@ class KeyboardUnitTest {
         val engSuggestions = WordSuggester.getWordCompletionsAndCorrections("hel")
         assertTrue(engSuggestions.any { it.contains("hel", ignoreCase = true) })
 
-        // Typo correction test: "kmu" -> "kamu"
+        // Exact user text is always preserved as the first suggestion.
+        assertEquals("kam", WordSuggester.getWordCompletionsAndCorrections("kam").first())
+        assertTrue(WordSuggester.getNextWordPredictions("").isEmpty())
         val corrected = WordSuggester.findAutoCorrection("kmu")
         assertEquals("kamu", corrected)
+        assertEquals(null, WordSuggester.findAutoCorrection("keyboard", mapOf("keyboard" to 20)))
+        assertEquals(null, WordSuggester.findAutoCorrection("Andi"))
     }
 
     @Test

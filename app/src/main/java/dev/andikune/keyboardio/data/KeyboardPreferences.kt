@@ -70,12 +70,12 @@ class KeyboardPreferences(context: Context) {
     }
 
     fun setHeightScale(scale: Float) {
-        val clamped = scale.coerceIn(0.75f, 1.35f)
+        val clamped = scale.coerceIn(1.0f, 1.35f)
         prefs.edit().putFloat("height_scale", clamped).apply()
         _heightScale.value = clamped
     }
 
-    private fun loadHeightScale(): Float = prefs.getFloat("height_scale", 1.0f)
+    private fun loadHeightScale(): Float = prefs.getFloat("height_scale", 1.0f).coerceIn(1.0f, 1.35f)
 
     fun setOneHandedMode(mode: OneHandedMode) {
         prefs.edit().putString("one_handed_mode", mode.name).apply()

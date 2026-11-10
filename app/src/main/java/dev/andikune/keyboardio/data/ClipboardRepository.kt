@@ -14,6 +14,8 @@ class ClipboardRepository(context: Context) {
     private companion object {
         const val TAG = "ClipboardRepository"
         const val MAX_ITEMS = 30
+        const val RETENTION_DAYS = 7
+        const val RETENTION_MS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
     }
 
     private val prefs: SharedPreferences =
@@ -29,13 +31,7 @@ class ClipboardRepository(context: Context) {
     private fun loadItems() {
         val raw = prefs.getString("clips_json", null)
         if (raw.isNullOrBlank()) {
-            val defaults = listOf(
-                ClipboardItem(id = 1, text = "Keyboard iO - Next-Gen RGB Typing", isPinned = true),
-                ClipboardItem(id = 2, text = "https://github.com/andikune", isPinned = false),
-                ClipboardItem(id = 3, text = "dev.andikune.keyboardio", isPinned = false)
-            )
-            _items.value = defaults
-            saveItems(defaults)
+            _items.value = emptyList()
             return
         }
 
@@ -53,7 +49,11 @@ class ClipboardRepository(context: Context) {
                     )
                 )
             }
-            _items.value = list
+            val now = System.currentTimeMillis()
+            val retained = list.filter { it.isPinned || now - it.timestamp <= RETENTION_MS }
+                .sortedByDescending { it.timestamp }
+            _items.value = retained
+            if (retained.size != list.size) saveItems(retained)
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()
@@ -77,11 +77,12 @@ class ClipboardRepository(context: Context) {
 
     fun addClip(text: String) {
         if (text.isBlank()) return
-        val current = _items.value.toMutableList()
+        val now = System.currentTimeMillis()
+        val current = _items.value.filter { it.isPinned || now - it.timestamp <= RETENTION_MS }.toMutableList()
         val existingIndex = current.indexOfFirst { it.text == text }
         if (existingIndex >= 0) {
             val existing = current.removeAt(existingIndex)
-            current.add(0, existing.copy(timestamp = System.currentTimeMillis()))
+            current.add(0, existing.copy(timestamp = now))
         } else {
             current.add(0, ClipboardItem(text = text))
         }
@@ -91,7 +92,7 @@ class ClipboardRepository(context: Context) {
         // memiliki lebih dari MAX_ITEMS item pinned.
         val unpinnedLimit = (MAX_ITEMS - pinned.size).coerceAtLeast(0)
         val unpinned = current.filterNot { it.isPinned }.take(unpinnedLimit)
-        val updated = pinned + unpinned
+        val updated = (pinned + unpinned).sortedByDescending { it.timestamp }
         _items.value = updated
         saveItems(updated)
     }

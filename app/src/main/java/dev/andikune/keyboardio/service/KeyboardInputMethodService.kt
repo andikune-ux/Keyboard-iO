@@ -79,8 +79,8 @@ class KeyboardInputMethodService : InputMethodService(),
     private var sessionCharCount: Int = 0
     private var sessionWordCount: Int = 0
 
-    // Undo history stack
-    private val undoStack = Stack<String>()
+    private data class UndoOperation(val deletedText: String, val insertedText: String, val expectedTail: String)
+    private val undoStack = Stack<UndoOperation>()
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         checkAndRecordClipboard()
@@ -290,20 +290,19 @@ class KeyboardInputMethodService : InputMethodService(),
                 commitText(action.text)
             }
             is KeyAction.Backspace -> {
-                val selected = ic.getSelectedText(0)
-                if (selected.isNullOrEmpty()) {
-                    ic.deleteSurroundingText(1, 0)
-                } else {
+                val selected = ic.getSelectedText(0)?.toString().orEmpty()
+                if (selected.isNotEmpty()) {
                     ic.commitText("", 1)
+                    recordUndo(selected, "")
+                } else {
+                    val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
+                    if (before.isNotEmpty()) {
+                        val removed = String(Character.toChars(Character.codePointBefore(before, before.length)))
+                        ic.deleteSurroundingTextInCodePoints(1, 0)
+                        recordUndo(removed, "")
+                    }
                 }
-                if (undoStack.isNotEmpty()) {
-                    undoStack.pop()
-                }
-                val curr = composingWord.value
-                if (curr.isNotEmpty()) {
-                    composingWord.value = curr.dropLast(1)
-                }
-                updatePreviousWord()
+                syncComposingWordFromEditor()
             }
             is KeyAction.SmartDeleteWord -> {
                 performSmartDeleteWord()
@@ -314,9 +313,15 @@ class KeyboardInputMethodService : InputMethodService(),
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
-                        ic.deleteSurroundingText(currentWord.length, 0)
-                        ic.commitText("$autoFixed ", 1)
-                        undoStack.push("$autoFixed ")
+                        val before = ic.getTextBeforeCursor(currentWord.length, 0)?.toString().orEmpty()
+                        if (!before.equals(currentWord, ignoreCase = true)) {
+                            syncComposingWordFromEditor()
+                            return
+                        }
+                        ic.deleteSurroundingTextInCodePoints(currentWord.codePointCount(0, currentWord.length), 0)
+                        val replacement = "$autoFixed "
+                        ic.commitText(replacement, 1)
+                        recordUndo(currentWord, replacement)
                         userWordHistory.learn(autoFixed)
                         composingWord.value = ""
                         previousWord.value = autoFixed.lowercase(Locale.ROOT)
@@ -353,7 +358,9 @@ class KeyboardInputMethodService : InputMethodService(),
                         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
                     }
                 }
-                undoStack.push("\n")
+                if (isMultiline && (noEnterAction || actionId == EditorInfo.IME_ACTION_NONE || actionId == EditorInfo.IME_ACTION_UNSPECIFIED || actionId == EditorInfo.IME_ACTION_DONE)) {
+                    recordUndo("", "\n")
+                }
                 composingWord.value = ""
             }
             is KeyAction.SwitchIme -> {
@@ -368,17 +375,18 @@ class KeyboardInputMethodService : InputMethodService(),
     private fun performSmartDeleteWord() {
         provideFeedback()
         val ic = currentInputConnection ?: return
-        val textBefore = ic.getTextBeforeCursor(250, 0)?.toString() ?: ""
+        val textBefore = ic.getTextBeforeCursor(250, 0)?.toString().orEmpty()
         if (textBefore.isEmpty()) {
-            ic.deleteSurroundingText(1, 0)
-            composingWord.value = ""
+            syncComposingWordFromEditor()
             return
         }
-
-        val deleteCount = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(textBefore)
-        val count = if (deleteCount > 0) deleteCount else 1
-        ic.deleteSurroundingText(count, 0)
-        composingWord.value = ""
+        val deleteCount = SmartDeleteEngine.calculateSmartDeleteCount(textBefore).coerceIn(0, textBefore.length)
+        if (deleteCount > 0) {
+            val deleted = textBefore.takeLast(deleteCount)
+            ic.deleteSurroundingText(deleteCount, 0)
+            recordUndo(deleted, "")
+        }
+        syncComposingWordFromEditor()
     }
 
     private fun commitText(text: String) {
@@ -406,7 +414,7 @@ class KeyboardInputMethodService : InputMethodService(),
         }
 
         ic.commitText(toCommit, 1)
-        undoStack.push(toCommit)
+        recordUndo("", toCommit)
 
         sessionCharCount += toCommit.length
         if (toCommit.any { it == ' ' || it == '\n' || it == '.' || it == '?' || it == '!' || it == ',' }) {
@@ -425,12 +433,13 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
         val cleanWord = word.trim('"', ' ')
-        val currentPrefixLen = composingWord.value.length
-        if (currentPrefixLen > 0) {
-            ic.deleteSurroundingText(currentPrefixLen, 0)
+        val currentPrefix = composingWord.value
+        if (currentPrefix.isNotEmpty()) {
+            ic.deleteSurroundingTextInCodePoints(currentPrefix.codePointCount(0, currentPrefix.length), 0)
         }
-        ic.commitText("$cleanWord ", 1)
-        undoStack.push("$cleanWord ")
+        val inserted = "$cleanWord "
+        ic.commitText(inserted, 1)
+        recordUndo(currentPrefix, inserted)
         userWordHistory.learn(cleanWord)
 
         sessionCharCount += cleanWord.length + 1
@@ -449,16 +458,35 @@ class KeyboardInputMethodService : InputMethodService(),
         previousWord.value = lastWord.lowercase(Locale.ROOT)
     }
 
+    private fun recordUndo(deletedText: String, insertedText: String) {
+        val ic = currentInputConnection ?: return
+        val tail = ic.getTextBeforeCursor(64, 0)?.toString().orEmpty()
+        undoStack.push(UndoOperation(deletedText, insertedText, tail))
+        while (undoStack.size > 100) undoStack.removeAt(0)
+    }
+
+    private fun syncComposingWordFromEditor() {
+        val ic = currentInputConnection ?: return
+        val before = ic.getTextBeforeCursor(80, 0)?.toString().orEmpty()
+        composingWord.value = before.takeLastWhile { it.isLetter() || it == '\'' }
+        updatePreviousWord()
+    }
+
     private fun performUndo() {
         provideFeedback()
         val ic = currentInputConnection ?: return
-        if (undoStack.isNotEmpty()) {
-            val last = undoStack.pop()
-            ic.deleteSurroundingText(last.length, 0)
-        } else {
-            ic.deleteSurroundingText(1, 0)
+        if (undoStack.isEmpty()) return
+        val operation = undoStack.pop()
+        val currentTail = ic.getTextBeforeCursor(64, 0)?.toString().orEmpty()
+        if (!currentTail.endsWith(operation.expectedTail)) {
+            undoStack.push(operation)
+            return
         }
-        composingWord.value = ""
+        if (operation.insertedText.isNotEmpty()) {
+            ic.deleteSurroundingTextInCodePoints(operation.insertedText.codePointCount(0, operation.insertedText.length), 0)
+        }
+        if (operation.deletedText.isNotEmpty()) ic.commitText(operation.deletedText, 1)
+        syncComposingWordFromEditor()
     }
 
     private fun provideFeedback() {

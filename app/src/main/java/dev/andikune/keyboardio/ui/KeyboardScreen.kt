@@ -196,8 +196,10 @@ fun KeyboardScreen(
             emptyList()
         } else if (currentWordForSuggestions.trim().isNotEmpty()) {
             WordSuggester.getWordCompletionsAndCorrections(currentWordForSuggestions, learnedWords = learnedWords)
+        } else if (previousWord.isNotBlank() && !editorState.isNumberOnly) {
+            WordSuggester.getNextWordPredictions(previousWord, learnedWords = learnedWords)
         } else {
-            WordSuggester.getNextWordPredictions(previousWord)
+            emptyList()
         }
     }
 
@@ -320,9 +322,7 @@ fun KeyboardScreen(
 
     // If input requires number only, switch layout automatically
     LaunchedEffect(editorState.isNumberOnly) {
-        if (editorState.isNumberOnly) {
-            layoutMode = KeyboardLayoutMode.NUMBERS_SYMBOLS
-        }
+        layoutMode = if (editorState.isNumberOnly) KeyboardLayoutMode.NUMBERS_SYMBOLS else KeyboardLayoutMode.QWERTY_LOWER
     }
 
     // Floating drag offset
@@ -355,7 +355,7 @@ fun KeyboardScreen(
         )
     }
 
-    val baseKeyHeight = 44.dp * heightScale
+    val baseKeyHeight = 48.dp * heightScale
     val enterLabel = editorState.enterAction.displayLabel
     val spaceLabel = spacebarStyle.displayLabel
 
@@ -506,7 +506,7 @@ fun KeyboardScreen(
                 },
                 onOpenVoiceInput = {
                     if (activePanel == ActivePanel.VOICE_INPUT) {
-                        voiceInputManager?.stopListening()
+                        voiceInputManager?.cancelListening()
                         activePanel = ActivePanel.NONE
                     } else {
                         activePanel = ActivePanel.VOICE_INPUT
@@ -677,7 +677,7 @@ fun KeyboardScreen(
                                 activePanel = ActivePanel.NONE
                             },
                             onClose = {
-                                voiceInputManager?.stopListening()
+                                voiceInputManager?.cancelListening()
                                 activePanel = ActivePanel.NONE
                             }
                         )

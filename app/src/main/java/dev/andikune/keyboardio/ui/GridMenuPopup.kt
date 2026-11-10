@@ -23,11 +23,9 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FormatSize
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ViewStream
@@ -76,26 +74,10 @@ fun GridMenuPopup(
     onNicknameFontClick: () -> Unit,
     onVoiceInputClick: () -> Unit,
     onSoundClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {},
-    onTypingActivityClick: () -> Unit = {},
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val items = listOf(
-        GridMenuItem(
-            id = "settings",
-            title = "Pengaturan",
-            subtitle = "Setelan penuh",
-            icon = Icons.Default.Settings,
-            color = rgbTheme.primary
-        ),
-        GridMenuItem(
-            id = "typing_activity",
-            title = "Aktivitas Ketik",
-            subtitle = "24 Jam",
-            icon = Icons.Default.History,
-            color = rgbTheme.secondary
-        ),
         GridMenuItem(
             id = "resize",
             title = "Ubah Ukuran",
@@ -230,8 +212,6 @@ fun GridMenuPopup(
                     rgbTheme = rgbTheme,
                     onClick = {
                         when (item.id) {
-                            "settings" -> onSettingsClick()
-                            "typing_activity" -> onTypingActivityClick()
                             "resize" -> onResizeClick()
                             "one_handed" -> onOneHandedClick()
                             "floating" -> onFloatingClick()

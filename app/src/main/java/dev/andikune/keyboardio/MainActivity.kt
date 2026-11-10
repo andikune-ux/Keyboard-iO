@@ -1555,7 +1555,7 @@ private fun CustomizationTab(
                     Slider(
                         value = heightScale,
                         onValueChange = { preferences.setHeightScale(it) },
-                        valueRange = 0.75f..1.35f,
+                        valueRange = 1.0f..1.35f,
                         colors = SliderDefaults.colors(
                             thumbColor = rgbTheme.primary,
                             activeTrackColor = rgbTheme.primary,
