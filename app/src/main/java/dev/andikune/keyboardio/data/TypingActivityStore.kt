@@ -49,19 +49,29 @@ class TypingActivityStore(context: Context) {
     @Synchronized
     fun recordSession(text: String, startedAt: Long, endedAt: Long) {
         val now = System.currentTimeMillis()
+        val draftCreatedAt = prefs.getString(KEY_ACTIVE_DRAFT, null)?.let { raw ->
+            runCatching {
+                val draft = JSONObject(raw)
+                if (draft.optLong("startedAt", -1L) == startedAt) {
+                    draft.optLong("createdAt", startedAt)
+                } else null
+            }.getOrNull()
+        }
         val current = prune(_sessions.value, now).toMutableList()
         current.add(
             TypingSessionRecord(
                 startedAt = startedAt,
                 endedAt = endedAt,
-                createdAt = now,
+                // Retention begins when this session draft was first saved, not when
+                // a long-running keyboard session is eventually closed.
+                createdAt = draftCreatedAt ?: now,
                 text = text,
                 charCount = text.codePointCount(0, text.length),
                 wordCount = SESSION_WORD_PATTERN.findAll(text).count(),
                 durationMs = (endedAt - startedAt).coerceAtLeast(0L)
             )
         )
-        val updated = current.sortedByDescending { it.createdAt }
+        val updated = prune(current, now)
         _sessions.value = updated
         saveSessions(updated)
         prefs.edit().remove(KEY_ACTIVE_DRAFT).apply()

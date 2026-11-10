@@ -74,6 +74,25 @@ class TypingActivityStoreTest {
     }
 
     @Test
+    fun completedLongRunningSessionDoesNotRestartItsTwentyFourHourRetention() {
+        val now = System.currentTimeMillis()
+        val startedAt = now - 26L * 60 * 60 * 1000
+        val store = TypingActivityStore(context)
+        store.beginSession(startedAt)
+        val draft = JSONObject().apply {
+            put("startedAt", startedAt)
+            put("createdAt", now - 25L * 60 * 60 * 1000)
+            put("updatedAt", now - 1_000L)
+            put("text", "long running session")
+        }
+        context.getSharedPreferences("keyboard_io_typing_activity", Context.MODE_PRIVATE)
+            .edit().putString("typing_active_session_draft", draft.toString()).commit()
+
+        store.recordSession("long running session", startedAt, now)
+        assertTrue(store.getStats().sessions.isEmpty())
+    }
+
+    @Test
     fun recoveredDraftKeepsItsOriginalCreationTime() {
         val now = System.currentTimeMillis()
         val createdAt = now - 60_000L
