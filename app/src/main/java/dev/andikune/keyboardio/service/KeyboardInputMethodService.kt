@@ -533,7 +533,7 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun extractLastWord(text: String): String {
-        val token = text.trimEnd().substringAfterLast(' ').substringAfterLast('\\n', "")
+        val token = text.trimEnd().substringAfterLast(' ').substringAfterLast('\n', "")
         return token.takeLastWhile { it.isLetter() || it == '\'' }.lowercase(Locale.ROOT)
     }
 
