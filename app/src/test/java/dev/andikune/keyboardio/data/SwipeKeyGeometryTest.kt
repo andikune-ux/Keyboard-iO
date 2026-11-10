@@ -32,4 +32,10 @@ class SwipeKeyGeometryTest {
         assertNull(SwipeKeyGeometry.letterAt(500f, 175f, width, rowHeight))
         assertNull(SwipeKeyGeometry.letterAt(500f, 25f, 0f, rowHeight))
     }
+    @Test fun scalesWithActualKeyboardWidth() {
+        assertEquals('q', SwipeKeyGeometry.letterAt(60f, 30f, 1200f, 60f))
+        assertEquals('a', SwipeKeyGeometry.letterAt(120f, 90f, 1200f, 60f))
+        assertEquals('z', SwipeKeyGeometry.letterAt(240f, 150f, 1200f, 60f))
+    }
+
 }
