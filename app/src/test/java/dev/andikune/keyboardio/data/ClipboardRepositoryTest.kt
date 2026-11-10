@@ -27,6 +27,31 @@ class ClipboardRepositoryTest {
     }
 
     @Test
+    fun privateModeStopsNewCaptureWithoutDeletingExistingHistory() {
+        val repository = ClipboardRepository(context)
+        val preferences = KeyboardPreferences(context)
+        repository.addClip("saved before private mode")
+
+        preferences.setClipboardPrivateMode(true)
+        assertFalse(
+            ClipboardCapturePolicy.shouldCapture(
+                isPasswordInput = false,
+                privateModeEnabled = preferences.isClipboardPrivateModeEnabled()
+            )
+        )
+        assertEquals("saved before private mode", repository.items.value.single().text)
+
+        preferences.setClipboardPrivateMode(false)
+        assertTrue(
+            ClipboardCapturePolicy.shouldCapture(
+                isPasswordInput = false,
+                privateModeEnabled = preferences.isClipboardPrivateModeEnabled()
+            )
+        )
+        assertEquals("saved before private mode", repository.items.value.single().text)
+    }
+
+    @Test
     fun serviceAndActivityUseOneSharedRepositoryInstance() {
         val fromActivity = ClipboardRepository.getInstance(context)
         val fromKeyboardService = ClipboardRepository.getInstance(context)
