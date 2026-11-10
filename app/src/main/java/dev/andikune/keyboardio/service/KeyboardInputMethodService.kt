@@ -163,6 +163,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         onKeyAction = { handleKeyAction(it) },
                         onSecondaryChar = { commitText(it) },
                         onPasteText = { commitText(it) },
+                        onSessionTextChanged = { oldText, newText -> replaceSessionText(oldText, newText) },
                         onUndo = { performUndo() },
                         onSmartDeleteWord = { performSmartDeleteWord() },
                         onSuggestionPicked = { word -> handleSuggestionPicked(word) }
@@ -544,6 +545,15 @@ class KeyboardInputMethodService : InputMethodService(),
             appendToSession(operation.deletedText)
         }
         syncComposingWordFromEditor()
+    }
+
+    private fun replaceSessionText(oldText: String, newText: String) {
+        if (!sessionActive || !sessionCaptureAllowed) return
+        if (oldText.isNotEmpty() && sessionText.endsWith(oldText)) {
+            sessionText.setLength(sessionText.length - oldText.length)
+        }
+        if (newText.isNotEmpty()) sessionText.append(newText)
+        typingActivityStore.updateActiveSession(sessionStartTime, sessionText.toString())
     }
 
     private fun appendToSession(text: String) {

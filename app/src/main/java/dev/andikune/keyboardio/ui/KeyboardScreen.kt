@@ -149,6 +149,7 @@ fun KeyboardScreen(
     onKeyAction: (KeyAction) -> Unit,
     onSecondaryChar: (String) -> Unit,
     onPasteText: (String) -> Unit,
+    onSessionTextChanged: (oldText: String, newText: String) -> Unit,
     onUndo: () -> Unit,
     onSmartDeleteWord: () -> Unit,
     onSuggestionPicked: (String) -> Unit,
@@ -231,33 +232,43 @@ fun KeyboardScreen(
     val waveAnim = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
 
+    fun updateTranslateSource(newText: String) {
+        val previousText = translateSourceText
+        translateSourceText = newText
+        onSessionTextChanged(previousText, newText)
+    }
+
+    fun deleteLastCodePoints(text: String, count: Int): String {
+        if (count <= 0 || text.isEmpty()) return text
+        val safeCount = count.coerceAtMost(text.codePointCount(0, text.length))
+        val newEnd = text.offsetByCodePoints(text.length, -safeCount)
+        return text.substring(0, newEnd)
+    }
+
     val effectiveKeyAction: (KeyAction) -> Unit = { action ->
         if (isTranslateMode) {
             when (action) {
                 is KeyAction.CommitText -> {
-                    translateSourceText += action.text
+                    updateTranslateSource(translateSourceText + action.text)
                 }
                 is KeyAction.Space -> {
-                    translateSourceText += " "
+                    updateTranslateSource(translateSourceText + " ")
                 }
                 is KeyAction.Backspace -> {
-                    if (translateSourceText.isNotEmpty()) {
-                        translateSourceText = translateSourceText.dropLast(1)
-                    }
+                    updateTranslateSource(deleteLastCodePoints(translateSourceText, 1))
                 }
                 is KeyAction.SmartDeleteWord -> {
                     val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
-                    translateSourceText = if (count > 0 && count <= translateSourceText.length) {
-                        translateSourceText.dropLast(count)
-                    } else ""
+                    updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
                 }
                 is KeyAction.Enter -> {
                     if (translateResultText.isNotEmpty()) {
                         onPasteText(translateResultText)
                         translateSourceText = ""
                     } else if (translateSourceText.isNotEmpty()) {
-                        onPasteText(translateSourceText)
-                        translateSourceText = ""
+                        val source = translateSourceText
+                        updateTranslateSource("")
+                        onPasteText(source)
                     }
                 }
                 else -> onKeyAction(action)
@@ -269,7 +280,7 @@ fun KeyboardScreen(
 
     val effectiveSecondaryChar: (String) -> Unit = { char ->
         if (isTranslateMode) {
-            translateSourceText += char
+            updateTranslateSource(translateSourceText + char)
         } else {
             onSecondaryChar(char)
         }
@@ -278,9 +289,7 @@ fun KeyboardScreen(
     val effectiveSmartDelete: () -> Unit = {
         if (isTranslateMode) {
             val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
-            translateSourceText = if (count > 0 && count <= translateSourceText.length) {
-                translateSourceText.dropLast(count)
-            } else ""
+            updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
         } else {
             onSmartDeleteWord()
         }
@@ -290,11 +299,12 @@ fun KeyboardScreen(
         val word = rawWord.trim('"', ' ')
         if (isTranslateMode) {
             val lastSpace = translateSourceText.lastIndexOf(' ')
-            translateSourceText = if (lastSpace >= 0) {
+            val updatedText = if (lastSpace >= 0) {
                 translateSourceText.substring(0, lastSpace + 1) + "$word "
             } else {
                 "$word "
             }
+            updateTranslateSource(updatedText)
         } else {
             onSuggestionPicked(word)
         }
@@ -558,14 +568,14 @@ fun KeyboardScreen(
                     translatedText = translateResultText,
                     isIdToEn = isIdToEn,
                     onSwitchLanguage = { isIdToEn = !isIdToEn },
-                    onClearText = { translateSourceText = "" },
+                    onClearText = { updateTranslateSource("") },
                     onInsertTranslation = { text ->
                         onPasteText(text)
                         translateSourceText = ""
                     },
                     onPasteFromClipboard = {
                         val clip = clipboardItems.firstOrNull()?.text
-                        if (!clip.isNullOrBlank()) translateSourceText = clip
+                        if (!clip.isNullOrBlank()) updateTranslateSource(clip)
                     },
                     onClose = {
                         isTranslateMode = false
