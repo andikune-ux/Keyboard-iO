@@ -85,6 +85,18 @@ class TypingActivityStoreTest {
     }
 
     @Test
+    fun clearHistoryAlsoRemovesInterruptedDraft() {
+        val store = TypingActivityStore(context)
+        val startedAt = System.currentTimeMillis()
+        store.beginSession(startedAt)
+        store.updateActiveSession(startedAt, "temporary text")
+        store.clearAll()
+
+        val restored = TypingActivityStore(context).getStats()
+        assertTrue(restored.sessions.isEmpty())
+    }
+
+    @Test
     fun emptySessionIsStillRecordedWithOpenAndCloseTimes() {
         val store = TypingActivityStore(context)
         val start = System.currentTimeMillis() - 2_000L

@@ -130,6 +130,7 @@ import dev.andikune.keyboardio.ui.theme.NeonMagenta
 import dev.andikune.keyboardio.ui.theme.TextPrimary
 import dev.andikune.keyboardio.ui.theme.TextSecondary
 import dev.andikune.keyboardio.ui.theme.TextTertiary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
 
@@ -176,6 +177,13 @@ fun KeyboardScreen(
         )
     val typingStats = remember(typingSessions) {
         typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
+    }
+    LaunchedEffect(typingSessions, typingActivityStore) {
+        val nextExpiry = typingSessions.minOfOrNull { it.createdAt + 24 * 60 * 60 * 1000L }
+        if (nextExpiry != null) {
+            delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(0L))
+            typingActivityStore?.getStats()
+        }
     }
     val editorState by editorStateFlow.collectAsState()
     val composingWord by composingWordFlow.collectAsState()
