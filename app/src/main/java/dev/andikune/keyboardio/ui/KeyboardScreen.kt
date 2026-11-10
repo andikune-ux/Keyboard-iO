@@ -1101,7 +1101,7 @@ private fun TopHeaderBar(
         // Keep the three primary controls evenly spaced and visually balanced.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             // Text "iO" & Grid Menu
             Row(
@@ -1136,7 +1136,8 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Input Suara / Dikte",
                     tint = NeonCyan,
-                    modifier = Modifier.size(19.dp)
+                    // Keep the 48dp touch target, but bring the glyph visually toward Emoji.
+                    modifier = Modifier.offset(x = 7.dp).size(20.dp)
                 )
             }
 
@@ -1149,7 +1150,8 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.SentimentSatisfiedAlt,
                     contentDescription = "Ikon Emoji Utama",
                     tint = TextPrimary,
-                    modifier = Modifier.size(19.dp)
+                    // Visual offset only; the full 48dp clickable target remains unchanged.
+                    modifier = Modifier.offset(x = (-7).dp).size(20.dp)
                 )
             }
         }
