@@ -723,66 +723,59 @@ fun KeyboardScreen(
                                 .weight(1f)
                                 .padding(horizontal = 2.dp)
                                 .pointerInput(isSwipeTypingEnabled, layoutMode, baseKeyHeight, learnedWords, oneHandedMode, onSuggestionPicked) {
+                                    val keyboardWidth = size.width
+                                    val rowHeightPx = baseKeyHeight.toPx() + 6.dp.toPx()
+                                    val touchSlopPx = viewConfiguration.touchSlop
                                     if (isSwipeTypingEnabled && layoutMode in setOf(KeyboardLayoutMode.QWERTY_LOWER, KeyboardLayoutMode.QWERTY_UPPER, KeyboardLayoutMode.CAPS_LOCK)) {
                                         awaitEachGesture {
-                                            val down = awaitPointerEventScope {
-                                                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
-                                            }
+                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
                                             val pathLetters = StringBuilder()
                                             var dragging = false
                                             fun collectKey(position: Offset) {
-                                                val rowHeightPx = baseKeyHeight.toPx() + 6.dp.toPx()
                                                 val row = (position.y / rowHeightPx).toInt()
                                                 val letter = when (row) {
                                                     0 -> {
-                                                        val unit = size.width / 10f
+                                                        val unit = keyboardWidth / 10f
                                                         val index = ((position.x / unit) - 0.5f).roundToInt()
                                                         "qwertyuiop".getOrNull(index)
                                                     }
                                                     1 -> {
-                                                        val unit = size.width / 10f
+                                                        val unit = keyboardWidth / 10f
                                                         val index = ((position.x / unit) - 1f).roundToInt()
                                                         "asdfghjkl".getOrNull(index)
                                                     }
                                                     2 -> {
-                                                        val unit = size.width / 9.6f
+                                                        val unit = keyboardWidth / 9.6f
                                                         val index = ((position.x / unit) - 1.8f).roundToInt()
                                                         "zxcvbnm".getOrNull(index)
                                                     }
                                                     else -> null
                                                 }
-                                                if (letter != null && pathLetters.lastOrNull() != letter) {
-                                                    pathLetters.append(letter)
-                                                }
+                                                if (letter != null && pathLetters.lastOrNull() != letter) pathLetters.append(letter)
                                                 val drawOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
                                                 if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + drawOffset, position.y))
                                             }
                                             swipeTrail.clear()
                                             collectKey(down.position)
-                                            awaitPointerEventScope {
-                                                while (true) {
-                                                    val event = awaitPointerEvent(PointerEventPass.Final)
-                                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                                    if (!change.pressed) {
-                                                        if (dragging) {
-                                                            WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
-                                                        }
-                                                        break
-                                                    }
-                                                    if (!dragging && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
-                                                        dragging = true
-                                                    }
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Final)
+                                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                if (!change.pressed) {
                                                     if (dragging) {
-                                                        collectKey(change.position)
-                                                        change.consume()
+                                                        WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
                                                     }
+                                                    break
+                                                }
+                                                if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
+                                                if (dragging) {
+                                                    collectKey(change.position)
+                                                    change.consume()
                                                 }
                                             }
                                             swipeTrail.clear()
                                         }
                                     }
-                                }
-                        ) {
+                                }                        ) {
                             when (layoutMode) {
                                 KeyboardLayoutMode.QWERTY_LOWER,
                                 KeyboardLayoutMode.QWERTY_UPPER,
