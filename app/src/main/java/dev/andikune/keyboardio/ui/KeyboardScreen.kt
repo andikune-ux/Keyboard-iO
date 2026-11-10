@@ -446,9 +446,9 @@ fun KeyboardScreen(
                                 }.getOrNull()
                             }
                         }
-                        if (bitmap != null) {
+                        bitmap?.let { decodedBitmap ->
                             Image(
-                                bitmap = bitmap.asImageBitmap(),
+                                bitmap = decodedBitmap.asImageBitmap(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
