@@ -197,7 +197,7 @@ fun KeyboardScreen(
     }
 
     val suggestions = remember(currentWordForSuggestions, previousWord, learnedWords, learnedBigrams, editorState.isPassword, isTranslateMode) {
-        if (editorState.isPassword) {
+        if (editorState.isPassword || !editorState.isAutoCorrectionAllowed) {
             emptyList()
         } else if (currentWordForSuggestions.trim().isNotEmpty()) {
             WordSuggester.getWordCompletionsAndCorrections(currentWordForSuggestions, learnedWords = learnedWords)

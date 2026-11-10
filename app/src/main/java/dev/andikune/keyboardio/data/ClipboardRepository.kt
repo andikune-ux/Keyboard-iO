@@ -58,8 +58,12 @@ class ClipboardRepository(context: Context) {
             val retained = list.filterNot { it.text in seededExamples }
                 .filter { it.isPinned || now - it.timestamp <= RETENTION_MS }
                 .sortedByDescending { it.timestamp }
-            _items.value = retained
-            if (retained.size != list.size) saveItems(retained)
+            val pinned = retained.filter { it.isPinned }
+            val unpinned = retained.filterNot { it.isPinned }
+                .take((MAX_ITEMS - pinned.size).coerceAtLeast(0))
+            val bounded = pinned + unpinned
+            _items.value = bounded
+            if (bounded.size != list.size) saveItems(bounded)
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()
