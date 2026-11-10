@@ -13,9 +13,6 @@ import org.json.JSONObject
 class ClipboardRepository(context: Context) {
     private companion object {
         const val TAG = "ClipboardRepository"
-        const val MAX_ITEMS = 30
-        const val RETENTION_DAYS = 7
-        const val RETENTION_MS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
     }
 
     private val prefs: SharedPreferences =
@@ -49,21 +46,9 @@ class ClipboardRepository(context: Context) {
                     )
                 )
             }
-            val now = System.currentTimeMillis()
-            val seededExamples = setOf(
-                "Keyboard iO - Next-Gen RGB Typing",
-                "https://github.com/andikune",
-                "dev.andikune.keyboardio"
-            )
-            val retained = list.filterNot { it.text in seededExamples }
-                .filter { it.isPinned || now - it.timestamp <= RETENTION_MS }
-                .sortedByDescending { it.timestamp }
-            val pinned = retained.filter { it.isPinned }
-            val unpinned = retained.filterNot { it.isPinned }
-                .take((MAX_ITEMS - pinned.size).coerceAtLeast(0))
-            val bounded = pinned + unpinned
-            _items.value = bounded
-            if (bounded.size != list.size) saveItems(bounded)
+            // Clipboard history is user-owned data: never expire, filter, or cap it.
+            // Only explicit user actions (delete / clear) may remove saved entries.
+            _items.value = list.sortedByDescending { it.timestamp }
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()
@@ -85,28 +70,26 @@ class ClipboardRepository(context: Context) {
         prefs.edit().putString("clips_json", jsonArray.toString()).apply()
     }
 
+    @Synchronized
     fun addClip(text: String) {
         if (text.isBlank()) return
         val now = System.currentTimeMillis()
-        val current = _items.value.filter { it.isPinned || now - it.timestamp <= RETENTION_MS }.toMutableList()
+        val current = _items.value.toMutableList()
         val existingIndex = current.indexOfFirst { it.text == text }
         if (existingIndex >= 0) {
+            // Keep the existing history entry and move it to the top; no other
+            // clipboard item is removed or aged out.
             val existing = current.removeAt(existingIndex)
             current.add(0, existing.copy(timestamp = now))
         } else {
-            current.add(0, ClipboardItem(text = text))
+            current.add(0, ClipboardItem(text = text, timestamp = now))
         }
-        // Limit to 30 items max, keep pinned items
-        val pinned = current.filter { it.isPinned }
-        // Jangan pernah meneruskan nilai negatif ke take() jika data lama
-        // memiliki lebih dari MAX_ITEMS item pinned.
-        val unpinnedLimit = (MAX_ITEMS - pinned.size).coerceAtLeast(0)
-        val unpinned = current.filterNot { it.isPinned }.take(unpinnedLimit)
-        val updated = pinned.sortedByDescending { it.timestamp } + unpinned.sortedByDescending { it.timestamp }
+        val updated = current.sortedByDescending { it.timestamp }
         _items.value = updated
         saveItems(updated)
     }
 
+    @Synchronized
     fun togglePin(id: Long) {
         val updated = _items.value.map {
             if (it.id == id) it.copy(isPinned = !it.isPinned) else it
@@ -115,12 +98,14 @@ class ClipboardRepository(context: Context) {
         saveItems(updated)
     }
 
+    @Synchronized
     fun removeItem(id: Long) {
         val updated = _items.value.filterNot { it.id == id }
         _items.value = updated
         saveItems(updated)
     }
 
+    @Synchronized
     fun clearUnpinned() {
         val updated = _items.value.filter { it.isPinned }
         _items.value = updated
