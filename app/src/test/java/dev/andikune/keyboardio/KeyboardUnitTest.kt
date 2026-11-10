@@ -194,13 +194,26 @@ class KeyboardUnitTest {
     }
 
     @Test
-    fun testNicknameFontGenerator() {
-        val sample = "Andik"
-        val sultan = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gamer_wing")
-        assertTrue(sultan.contains("Andik"))
+    fun testNicknameFontGeneratorSupportsExpandedUnicodeStyles() {
+        val sample = "Keyboard iO 123 😀 café"
+        val styles = dev.andikune.keyboardio.data.NicknameFontGenerator.STYLES
+        assertTrue(styles.size >= 20)
+        assertEquals(styles.size, styles.map { it.id }.distinct().size)
 
-        val gothic = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gothic")
-        assertNotNull(gothic)
-        assertTrue(gothic.isNotEmpty())
+        styles.forEach { style ->
+            val converted = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, style.id)
+            assertNotNull(converted)
+            assertTrue("Style ${style.id} should keep emoji", converted.contains("😀"))
+            assertTrue("Style ${style.id} should keep spaces", converted.contains(" "))
+        }
+
+        assertEquals(
+            sample,
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "unknown-style")
+        )
+        assertTrue(
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC xyz 123", "fullwidth")
+                .contains("ＡＢＣ")
+        )
     }
 }

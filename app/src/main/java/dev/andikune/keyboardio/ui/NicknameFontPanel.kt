@@ -54,7 +54,7 @@ fun NicknameFontPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var inputText by remember {
+    var inputText by remember(initialText) {
         mutableStateOf(if (initialText.isNotBlank()) initialText else "Keyboard iO")
     }
 
