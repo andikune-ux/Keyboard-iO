@@ -1,9 +1,10 @@
 package dev.andikune.keyboardio.data
 
 import java.math.BigDecimal
+import java.math.MathContext
 
 /**
- * Small, side-effect-free arithmetic parser. Never evaluates user input as code.
+ * Side-effect-free arithmetic parser. Never evaluates user input as code.
  * Supports +, -, *, /, %, parentheses, decimals and unary signs.
  */
 object QuickCalculator {
@@ -12,65 +13,63 @@ object QuickCalculator {
         if (normalized.isEmpty() || normalized.length > 160) return null
         return runCatching {
             val parser = Parser(normalized)
-            val result = parser.parse()
-            if (!result.isFinite()) return null
-            BigDecimal.valueOf(result).stripTrailingZeros().toPlainString()
+            parser.parse().stripTrailingZeros().toPlainString()
         }.getOrNull()
     }
 
     private class Parser(private val input: String) {
         private var index = 0
 
-        fun parse(): Double {
+        fun parse(): BigDecimal {
             val value = parseExpression()
             skipSpaces()
             require(index == input.length) { "Unexpected token" }
             return value
         }
 
-        private fun parseExpression(): Double {
+        private fun parseExpression(): BigDecimal {
             var value = parseTerm()
             while (true) {
                 skipSpaces()
                 value = when {
-                    consume('+') -> value + parseTerm()
-                    consume('-') -> value - parseTerm()
+                    consume('+') -> value.add(parseTerm())
+                    consume('-') -> value.subtract(parseTerm())
                     else -> return value
                 }
             }
         }
 
-        private fun parseTerm(): Double {
+        private fun parseTerm(): BigDecimal {
             var value = parseUnary()
             while (true) {
                 skipSpaces()
                 value = when {
-                    consume('*') -> value * parseUnary()
+                    consume('*') -> value.multiply(parseUnary())
                     consume('/') -> {
                         val divisor = parseUnary()
-                        require(divisor != 0.0) { "Division by zero" }
-                        value / divisor
+                        require(divisor.compareTo(BigDecimal.ZERO) != 0) { "Division by zero" }
+                        value.divide(divisor, MathContext.DECIMAL64)
                     }
                     consume('%') -> {
                         val divisor = parseUnary()
-                        require(divisor != 0.0) { "Division by zero" }
-                        value % divisor
+                        require(divisor.compareTo(BigDecimal.ZERO) != 0) { "Division by zero" }
+                        value.remainder(divisor)
                     }
                     else -> return value
                 }
             }
         }
 
-        private fun parseUnary(): Double {
+        private fun parseUnary(): BigDecimal {
             skipSpaces()
             return when {
                 consume('+') -> parseUnary()
-                consume('-') -> -parseUnary()
+                consume('-') -> parseUnary().negate()
                 else -> parsePrimary()
             }
         }
 
-        private fun parsePrimary(): Double {
+        private fun parsePrimary(): BigDecimal {
             skipSpaces()
             if (consume('(')) {
                 val value = parseExpression()
@@ -81,7 +80,7 @@ object QuickCalculator {
             return parseNumber()
         }
 
-        private fun parseNumber(): Double {
+        private fun parseNumber(): BigDecimal {
             skipSpaces()
             val start = index
             var hasDigit = false
@@ -97,7 +96,7 @@ object QuickCalculator {
                 }
             }
             require(hasDigit) { "Number expected" }
-            return input.substring(start, index).toDouble()
+            return BigDecimal(input.substring(start, index))
         }
 
         private fun consume(char: Char): Boolean {

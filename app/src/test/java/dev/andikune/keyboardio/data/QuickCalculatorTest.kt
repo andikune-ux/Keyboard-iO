@@ -28,4 +28,9 @@ class QuickCalculatorTest {
     @Test fun supportsNestedExpressionsAndWhitespace() {
         assertEquals("20", QuickCalculator.evaluate(" (2 + (3 * 4)) + 6 "))
     }
+    @Test fun keepsDecimalArithmeticAccurate() {
+        assertEquals("0.3", QuickCalculator.evaluate("0.1 + 0.2"))
+        assertEquals("0.3", QuickCalculator.evaluate("0.9 / 3"))
+        assertEquals("0", QuickCalculator.evaluate("-0"))
+    }
 }
