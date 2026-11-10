@@ -739,7 +739,10 @@ fun KeyboardScreen(
                             rmsVolume = rmsVolume,
                             errorMessage = voiceErrorMessage,
                             selectedLanguage = voiceInputLanguage,
-                            onLanguageSelected = preferences::setVoiceInputLanguage,
+                            onLanguageSelected = { languageTag ->
+                                preferences.setVoiceInputLanguage(languageTag)
+                                if (isVoiceListening) voiceInputManager?.startListening(languageTag)
+                            },
                             rgbTheme = rgbTheme,
                             onStopListening = {
                                 voiceInputManager?.stopListening()
