@@ -84,8 +84,13 @@ class KeyboardInputMethodService : InputMethodService(),
     private var sessionCaptureAllowed = true
     private val sessionText = StringBuilder()
 
-    private data class UndoOperation(val deletedText: String, val insertedText: String, val expectedTail: String)
+    private data class UndoOperation(val deletedText: String, val insertedText: String, val expectedTail: String, val expectedAfterCursor: String)
     private val undoStack = Stack<UndoOperation>()
+    private companion object {
+        const val MAX_UNDO_OPERATIONS = 100
+        const val MAX_UNDO_TEXT_LENGTH = 4096
+        const val UNDO_CONTEXT_LENGTH = 32
+    }
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         checkAndRecordClipboard()
@@ -531,9 +536,14 @@ class KeyboardInputMethodService : InputMethodService(),
 
     private fun recordUndo(deletedText: String, insertedText: String) {
         val ic = currentInputConnection ?: return
-        val tail = ic.getTextBeforeCursor(64, 0)?.toString().orEmpty()
-        undoStack.push(UndoOperation(deletedText, insertedText, tail))
-        while (undoStack.size > 100) undoStack.removeAt(0)
+        if (deletedText.length > MAX_UNDO_TEXT_LENGTH || insertedText.length > MAX_UNDO_TEXT_LENGTH) return
+        val contextLength = (insertedText.length + UNDO_CONTEXT_LENGTH).coerceAtLeast(64)
+            .coerceAtMost(MAX_UNDO_TEXT_LENGTH + UNDO_CONTEXT_LENGTH)
+        val tail = ic.getTextBeforeCursor(contextLength, 0)?.toString().orEmpty()
+        if (insertedText.isNotEmpty() && !tail.endsWith(insertedText)) return
+        val afterCursor = ic.getTextAfterCursor(UNDO_CONTEXT_LENGTH, 0)?.toString().orEmpty()
+        undoStack.push(UndoOperation(deletedText, insertedText, tail, afterCursor))
+        while (undoStack.size > MAX_UNDO_OPERATIONS) undoStack.removeAt(0)
     }
 
     private fun syncComposingWordFromEditor() {
@@ -554,26 +564,45 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
         if (undoStack.isEmpty()) return
-        val operation = undoStack.pop()
-        val currentTail = ic.getTextBeforeCursor(64, 0)?.toString().orEmpty()
-        if (!currentTail.endsWith(operation.expectedTail)) {
-            undoStack.push(operation)
-            return
-        }
-        var canRestoreDeletedText = true
+        val operation = undoStack.peek()
+        val after = ic.getTextAfterCursor(UNDO_CONTEXT_LENGTH, 0)?.toString().orEmpty()
+        if (after != operation.expectedAfterCursor) return
         if (operation.insertedText.isNotEmpty()) {
-            canRestoreDeletedText = ic.deleteSurroundingTextInCodePoints(
-                operation.insertedText.codePointCount(0, operation.insertedText.length), 0
-            )
-            if (canRestoreDeletedText) removeFromSessionSuffix(operation.insertedText)
+            val actual = ic.getTextBeforeCursor(operation.insertedText.length, 0)?.toString().orEmpty()
+            if (actual != operation.insertedText) return
+        } else {
+            val actual = ic.getTextBeforeCursor(operation.expectedTail.length, 0)?.toString().orEmpty()
+            if (actual != operation.expectedTail) return
         }
-        if (!canRestoreDeletedText) {
+        undoStack.pop()
+        ic.beginBatchEdit()
+        var removedInsertion = false
+        var succeeded = true
+        try {
+            if (operation.insertedText.isNotEmpty()) {
+                succeeded = ic.deleteSurroundingTextInCodePoints(
+                    operation.insertedText.codePointCount(0, operation.insertedText.length), 0
+                )
+                removedInsertion = succeeded
+            }
+            if (succeeded && operation.deletedText.isNotEmpty()) succeeded = ic.commitText(operation.deletedText, 1)
+            if (!succeeded && removedInsertion && operation.insertedText.isNotEmpty()) {
+                ic.commitText(operation.insertedText, 1)
+            }
+        } catch (_: Exception) {
+            succeeded = false
+            if (removedInsertion && operation.insertedText.isNotEmpty()) {
+                runCatching { ic.commitText(operation.insertedText, 1) }
+            }
+        } finally {
+            ic.endBatchEdit()
+        }
+        if (!succeeded) {
             undoStack.push(operation)
             return
         }
-        if (operation.deletedText.isNotEmpty() && ic.commitText(operation.deletedText, 1)) {
-            appendToSession(operation.deletedText)
-        }
+        if (operation.insertedText.isNotEmpty()) removeFromSessionSuffix(operation.insertedText)
+        if (operation.deletedText.isNotEmpty()) appendToSession(operation.deletedText)
         syncComposingWordFromEditor()
     }
 
