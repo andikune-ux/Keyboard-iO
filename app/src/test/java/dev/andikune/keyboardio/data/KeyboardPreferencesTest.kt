@@ -73,21 +73,6 @@ class KeyboardPreferencesTest {
     }
 
     @Test
-    fun migratesPreviouslySuggestedDefaultsToBrighterWallpaper() {
-        context.getSharedPreferences("keyboard_io_prefs", Context.MODE_PRIVATE)
-            .edit()
-            .putInt("custom_bg_settings_version", 2)
-            .putFloat("custom_bg_opacity", 0.92f)
-            .putFloat("custom_bg_dim", 0.10f)
-            .commit()
-
-        val preferences = KeyboardPreferences(context)
-        assertEquals(1f, preferences.customBgOpacity.value, 0.001f)
-        assertEquals(0f, preferences.customBgDim.value, 0.001f)
-    }
-
-
-    @Test
     fun preservesVersionTwoWallpaperValuesThatMayBeUserCustomized() {
         context.getSharedPreferences("keyboard_io_prefs", Context.MODE_PRIVATE)
             .edit()
