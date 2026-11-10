@@ -39,9 +39,11 @@ class KeyboardPreferencesTest {
 
         settingsPreferences.setClipboardPrivateMode(true)
         assertEquals(true, imePreferences.clipboardPrivateMode.value)
+        assertEquals(true, imePreferences.isClipboardPrivateModeEnabled())
 
         settingsPreferences.setClipboardPrivateMode(false)
         assertEquals(false, imePreferences.clipboardPrivateMode.value)
+        assertEquals(false, imePreferences.isClipboardPrivateModeEnabled())
     }
 
     @Test
