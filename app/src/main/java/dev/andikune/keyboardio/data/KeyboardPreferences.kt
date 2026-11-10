@@ -238,7 +238,7 @@ class KeyboardPreferences(context: Context) {
     }
 
     fun setCustomBgOpacity(opacity: Float) {
-        val clamped = opacity.coerceIn(0.1f, 1f)
+        val clamped = opacity.coerceIn(0f, 1f)
         prefs.edit().putFloat("custom_bg_opacity", clamped).apply()
         _customBgOpacity.value = clamped
     }
