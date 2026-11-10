@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
+import dev.andikune.keyboardio.data.SmartDeleteEngine
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.TypingActivityStore
 import dev.andikune.keyboardio.data.UserWordHistory

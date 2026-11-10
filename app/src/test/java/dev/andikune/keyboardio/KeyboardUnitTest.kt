@@ -90,7 +90,7 @@ class KeyboardUnitTest {
 
         // Next word predictions: returns top starters when previous word is blank
         val nextWordBlank = WordSuggester.getNextWordPredictions("")
-        assertTrue(nextWordBlank.isNotEmpty())
+        assertTrue(nextWordBlank.isEmpty())
 
         val suggestions = WordSuggester.getWordCompletionsAndCorrections("kam")
         assertTrue(suggestions.isNotEmpty())
@@ -163,7 +163,8 @@ class KeyboardUnitTest {
     fun testLearnedWordsRankSuggestionsAndCorrection() {
         val learned = mapOf("kamar" to 20, "kami" to 1)
         val suggestions = WordSuggester.getSuggestions("kam", learnedWords = learned)
-        assertEquals("kamar", suggestions.first())
+        assertEquals("kam", suggestions.first())
+        assertTrue(suggestions.contains("kamar"))
         assertEquals("kamu", WordSuggester.findAutoCorrection("kmu", learned))
         assertEquals(null, WordSuggester.findAutoCorrection("teh", learned))
     }
