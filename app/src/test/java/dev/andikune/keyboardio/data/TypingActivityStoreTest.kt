@@ -85,6 +85,29 @@ class TypingActivityStoreTest {
     }
 
     @Test
+    fun doesNotCapSessionHistoryAtTwoHundredRecords() {
+        val now = System.currentTimeMillis()
+        val array = JSONArray()
+        repeat(225) { index ->
+            array.put(JSONObject().apply {
+                put("id", "session-$index")
+                put("startedAt", now - 10_000L)
+                put("endedAt", now - 1_000L)
+                put("createdAt", now - 1_000L + index)
+                put("text", "session text $index")
+                put("charCount", 14)
+                put("wordCount", 3)
+                put("durationMs", 9_000L)
+            })
+        }
+        context.getSharedPreferences("keyboard_io_typing_activity", Context.MODE_PRIVATE)
+            .edit().putString("typing_sessions_data", array.toString()).commit()
+
+        val sessions = TypingActivityStore(context).getStats().sessions
+        assertEquals(225, sessions.size)
+    }
+
+    @Test
     fun clearHistoryAlsoRemovesInterruptedDraft() {
         val store = TypingActivityStore(context)
         val startedAt = System.currentTimeMillis()
