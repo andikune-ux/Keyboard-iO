@@ -26,13 +26,14 @@ class KeyboardPreferences(context: Context) {
             }
         }
         if (settingsVersion < 3) {
-            val previousOpacity = if (
-                settingsVersion < 2 && prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f
-            ) 0.92f else prefs.getFloat("custom_bg_opacity", 1f)
-            val previousDim = if (
-                settingsVersion < 2 && prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f
-            ) 0.10f else prefs.getFloat("custom_bg_dim", 0f)
-            if (previousOpacity == 0.92f && previousDim == 0.10f) {
+            // Only migrate the legacy defaults when their origin is unambiguous.
+            // Version 2 may contain a user's intentional 0.92 / 0.10 customization,
+            // so preserve that pair rather than silently overwriting user settings.
+            val hasKnownLegacyDefaults =
+                settingsVersion < 2 &&
+                    prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f &&
+                    prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f
+            if (hasKnownLegacyDefaults) {
                 editor.putFloat("custom_bg_opacity", 1f)
                 editor.putFloat("custom_bg_dim", 0f)
             }
