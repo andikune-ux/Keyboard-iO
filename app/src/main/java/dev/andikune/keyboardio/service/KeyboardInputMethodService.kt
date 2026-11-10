@@ -226,7 +226,6 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        registerClipboardListener()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
@@ -278,7 +277,7 @@ class KeyboardInputMethodService : InputMethodService(),
         }
         // Never retain password-field content, even if the editor changes mid-session.
         sessionCaptureAllowed = !isPassword
-
+        if (isPassword) unregisterClipboardListener() else registerClipboardListener()
     }
 
     override fun onUpdateSelection(
