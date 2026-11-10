@@ -536,10 +536,16 @@ class KeyboardInputMethodService : InputMethodService(),
             undoStack.push(operation)
             return
         }
+        var canRestoreDeletedText = true
         if (operation.insertedText.isNotEmpty()) {
-            if (ic.deleteSurroundingTextInCodePoints(operation.insertedText.codePointCount(0, operation.insertedText.length), 0)) {
-                removeFromSessionSuffix(operation.insertedText)
-            }
+            canRestoreDeletedText = ic.deleteSurroundingTextInCodePoints(
+                operation.insertedText.codePointCount(0, operation.insertedText.length), 0
+            )
+            if (canRestoreDeletedText) removeFromSessionSuffix(operation.insertedText)
+        }
+        if (!canRestoreDeletedText) {
+            undoStack.push(operation)
+            return
         }
         if (operation.deletedText.isNotEmpty() && ic.commitText(operation.deletedText, 1)) {
             appendToSession(operation.deletedText)
