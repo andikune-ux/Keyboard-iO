@@ -350,7 +350,7 @@ fun KeyboardScreen(
                 activeWave = null
             }
         }
-        handleKeyClick(key, layoutMode, effectiveKeyAction) { next -> layoutMode = next }
+        handleKeyClick(key, layoutMode, editorState.isNumberOnly, effectiveKeyAction) { next -> layoutMode = next }
     }
 
     // Swipe typing touch points
@@ -1034,28 +1034,30 @@ fun KeyboardScreen(
 private fun handleKeyClick(
     keyItem: KeyItem,
     currentMode: KeyboardLayoutMode,
+    isNumberOnly: Boolean,
     onKeyAction: (KeyAction) -> Unit,
     setMode: (KeyboardLayoutMode) -> Unit
 ) {
-    when (val action = keyItem.action) {
-        is KeyAction.Shift -> {
-            when (currentMode) {
-                KeyboardLayoutMode.QWERTY_LOWER -> setMode(KeyboardLayoutMode.QWERTY_UPPER)
-                KeyboardLayoutMode.QWERTY_UPPER -> setMode(KeyboardLayoutMode.CAPS_LOCK)
-                KeyboardLayoutMode.CAPS_LOCK -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-                else -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-            }
+    val action = keyItem.action
+    val nextMode = KeyboardLayouts.nextMode(currentMode, action, isNumberOnly)
+    if (nextMode != null) {
+        setMode(nextMode)
+        return
+    }
+
+    // A numeric editor is locked to numeric/symbol layouts. Ignore stale or
+    // unexpected letter/shift actions instead of sending invalid characters.
+    if (isNumberOnly && (action is KeyAction.Shift || action is KeyAction.SwitchToLetters)) {
+        return
+    }
+
+    if (action is KeyAction.CommitText) {
+        onKeyAction(action)
+        if (currentMode == KeyboardLayoutMode.QWERTY_UPPER) {
+            setMode(KeyboardLayoutMode.QWERTY_LOWER)
         }
-        is KeyAction.SwitchToSymbols -> setMode(KeyboardLayoutMode.NUMBERS_SYMBOLS)
-        is KeyAction.SwitchToMoreSymbols -> setMode(KeyboardLayoutMode.MORE_SYMBOLS)
-        is KeyAction.SwitchToLetters -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-        is KeyAction.CommitText -> {
-            onKeyAction(action)
-            if (currentMode == KeyboardLayoutMode.QWERTY_UPPER) {
-                setMode(KeyboardLayoutMode.QWERTY_LOWER)
-            }
-        }
-        else -> onKeyAction(action)
+    } else {
+        onKeyAction(action)
     }
 }
 
