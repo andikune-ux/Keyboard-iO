@@ -91,6 +91,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1096,15 +1097,17 @@ private fun TopHeaderBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Group Left (tetap): [iO + Menu] -> [Mic STT] -> [Emoji]
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Keep the three primary controls evenly spaced and visually balanced.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             // Text "iO" & Grid Menu
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onOpenGridMenu)
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .padding(horizontal = 5.dp, vertical = 3.dp)
                     .testTag("grid_menu_button")
@@ -1226,29 +1229,37 @@ private fun TopHeaderBar(
                 }
             }
         } else if (suggestions.isNotEmpty()) {
-            Row(
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxHeight()
+                    .padding(horizontal = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                suggestions.take(3).forEach { word ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 2.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(CyberCard)
-                            .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                            .clickable { onSuggestionPicked(word) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = word,
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    suggestions.take(3).forEachIndexed { index, word ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(CyberCard)
+                                .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                .clickable { onSuggestionPicked(word) }
+                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = word,
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
