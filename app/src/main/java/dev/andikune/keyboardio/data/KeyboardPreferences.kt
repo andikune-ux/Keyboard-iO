@@ -74,6 +74,9 @@ class KeyboardPreferences(context: Context) {
     private val _spacebarStyle = MutableStateFlow(loadSpacebarStyle())
     val spacebarStyle: StateFlow<SpacebarStyle> = _spacebarStyle.asStateFlow()
 
+    private val _voiceInputLanguage = MutableStateFlow(loadVoiceInputLanguage())
+    val voiceInputLanguage: StateFlow<String> = _voiceInputLanguage.asStateFlow()
+
     private val _autoCorrection = MutableStateFlow(loadAutoCorrection())
     val autoCorrection: StateFlow<Boolean> = _autoCorrection.asStateFlow()
 
@@ -179,6 +182,21 @@ class KeyboardPreferences(context: Context) {
     private fun loadSpacebarStyle(): SpacebarStyle {
         val raw = prefs.getString("spacebar_style", SpacebarStyle.DEFAULT.id)
         return SpacebarStyle.entries.find { it.id == raw } ?: SpacebarStyle.DEFAULT
+    }
+
+    fun setVoiceInputLanguage(languageTag: String) {
+        val normalized = when (languageTag) {
+            "id-ID", "en-US", "SYSTEM" -> languageTag
+            else -> "SYSTEM"
+        }
+        prefs.edit().putString("voice_input_language", normalized).apply()
+        _voiceInputLanguage.value = normalized
+    }
+
+    private fun loadVoiceInputLanguage(): String = when (prefs.getString("voice_input_language", "SYSTEM")) {
+        "id-ID" -> "id-ID"
+        "en-US" -> "en-US"
+        else -> "SYSTEM"
     }
 
     fun setAutoCorrection(enabled: Boolean) {

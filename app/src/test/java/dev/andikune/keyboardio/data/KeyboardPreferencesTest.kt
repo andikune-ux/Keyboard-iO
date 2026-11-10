@@ -22,6 +22,23 @@ class KeyboardPreferencesTest {
     }
 
     @Test
+    fun voiceLanguageDefaultsToSystemAndPersistsExplicitChoice() {
+        val preferences = KeyboardPreferences(context)
+        assertEquals("SYSTEM", preferences.voiceInputLanguage.value)
+        preferences.setVoiceInputLanguage("id-ID")
+        assertEquals("id-ID", KeyboardPreferences(context).voiceInputLanguage.value)
+        preferences.setVoiceInputLanguage("en-US")
+        assertEquals("en-US", KeyboardPreferences(context).voiceInputLanguage.value)
+    }
+
+    @Test
+    fun invalidVoiceLanguageFallsBackToSystem() {
+        val preferences = KeyboardPreferences(context)
+        preferences.setVoiceInputLanguage("xx-invalid")
+        assertEquals("SYSTEM", preferences.voiceInputLanguage.value)
+    }
+
+    @Test
     fun newInstallUsesVisibleWallpaperDefaults() {
         val preferences = KeyboardPreferences(context)
         assertEquals(1f, preferences.customBgOpacity.value, 0.001f)

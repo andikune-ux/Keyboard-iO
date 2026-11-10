@@ -205,6 +205,7 @@ fun KeyboardScreen(
     val liveSpokenText by (voiceInputManager?.liveSpokenText?.collectAsState() ?: remember { mutableStateOf("") })
     val rmsVolume by (voiceInputManager?.rmsVolume?.collectAsState() ?: remember { mutableFloatStateOf(0f) })
     val voiceErrorMessage by (voiceInputManager?.errorMessage?.collectAsState() ?: remember { mutableStateOf(null) })
+    val voiceInputLanguage by preferences.voiceInputLanguage.collectAsState()
 
     var isTranslateMode by remember { mutableStateOf(false) }
     var translateSourceText by remember { mutableStateOf("") }
@@ -559,7 +560,7 @@ fun KeyboardScreen(
                         activePanel = ActivePanel.NONE
                     } else {
                         activePanel = ActivePanel.VOICE_INPUT
-                        voiceInputManager?.startListening()
+                        voiceInputManager?.startListening(voiceInputLanguage)
                     }
                 },
                 onOpenEmoji = {
@@ -737,6 +738,8 @@ fun KeyboardScreen(
                             liveSpokenText = liveSpokenText,
                             rmsVolume = rmsVolume,
                             errorMessage = voiceErrorMessage,
+                            selectedLanguage = voiceInputLanguage,
+                            onLanguageSelected = preferences::setVoiceInputLanguage,
                             rgbTheme = rgbTheme,
                             onStopListening = {
                                 voiceInputManager?.stopListening()

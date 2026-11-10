@@ -33,6 +33,20 @@ internal class VoiceCallbackGeneration {
     fun isCurrent(token: Long): Boolean = token == generation
 }
 
+internal object VoiceLanguageConfig {
+    const val SYSTEM_DEFAULT = "SYSTEM"
+    const val INDONESIAN = "id-ID"
+    const val ENGLISH_US = "en-US"
+
+    fun resolve(selected: String?, deviceLocale: Locale = Locale.getDefault()): String {
+        if (selected.isNullOrBlank() || selected == SYSTEM_DEFAULT) {
+            return deviceLocale.toLanguageTag().takeIf { it.isNotBlank() && it != "und" } ?: INDONESIAN
+        }
+        val locale = Locale.forLanguageTag(selected)
+        return locale.toLanguageTag().takeIf { locale.language.isNotBlank() && it != "und" } ?: INDONESIAN
+    }
+}
+
 class VoiceInputManager(
     private val context: Context,
     private val onResult: (String) -> Unit
@@ -54,7 +68,7 @@ class VoiceInputManager(
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
-    fun startListening() {
+    fun startListening(languageTag: String? = VoiceLanguageConfig.SYSTEM_DEFAULT) {
         cancelListening()
         if (!isAvailable()) {
             _errorMessage.value = "Pengenalan suara tidak didukung pada perangkat ini"
@@ -133,11 +147,11 @@ class VoiceInputManager(
                 }
             })
 
-            val deviceLanguage = Locale.getDefault().toLanguageTag().ifBlank { "id-ID" }
+            val recognitionLanguage = VoiceLanguageConfig.resolve(languageTag)
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, deviceLanguage)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, deviceLanguage)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguage)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLanguage)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             }
