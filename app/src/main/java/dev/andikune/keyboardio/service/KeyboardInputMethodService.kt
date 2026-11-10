@@ -75,10 +75,10 @@ class KeyboardInputMethodService : InputMethodService(),
     private var audioFeedback: KeyboardAudioFeedback? = null
     private var voiceInputManager: VoiceInputManager? = null
 
-    // Session typing activity metrics (counted from keyboard show to hide, auto-purged > 24h)
+    // Full text buffer for the visible keyboard session.
     private var sessionStartTime: Long = 0L
-    private var sessionCharCount: Int = 0
-    private var sessionWordCount: Int = 0
+    private var sessionActive = false
+    private val sessionText = StringBuilder()
 
     private data class UndoOperation(val deletedText: String, val insertedText: String, val expectedTail: String)
     private val undoStack = Stack<UndoOperation>()
@@ -243,10 +243,11 @@ class KeyboardInputMethodService : InputMethodService(),
         undoStack.clear()
         updatePreviousWord()
 
-        // Reset and begin tracking new typing session
+        // Close a previous view if Android restarts the input view without finishing it.
+        finishTypingSession()
         sessionStartTime = System.currentTimeMillis()
-        sessionCharCount = 0
-        sessionWordCount = 0
+        sessionText.setLength(0)
+        sessionActive = true
 
         if (!isPassword) {
             checkAndRecordClipboard()
@@ -276,20 +277,11 @@ class KeyboardInputMethodService : InputMethodService(),
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         composingWord.value = ""
 
-        // Complete session and save to store (auto-purged after 24 hours)
-        val duration = (System.currentTimeMillis() - sessionStartTime).coerceAtLeast(0L)
-        if (sessionCharCount > 0 || sessionWordCount > 0) {
-            typingActivityStore.recordSession(
-                charCount = sessionCharCount,
-                wordCount = sessionWordCount.coerceAtLeast(1),
-                durationMs = duration
-            )
-        }
-        sessionCharCount = 0
-        sessionWordCount = 0
+        finishTypingSession()
     }
 
     override fun onDestroy() {
+        finishTypingSession()
         val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboardManager?.removePrimaryClipChangedListener(clipboardListener)
 
@@ -331,12 +323,14 @@ class KeyboardInputMethodService : InputMethodService(),
                 val selected = ic.getSelectedText(0)?.toString().orEmpty()
                 if (selected.isNotEmpty()) {
                     ic.commitText("", 1)
+                    removeFromSessionSuffix(selected)
                     recordUndo(selected, "")
                 } else {
                     val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
                     if (before.isNotEmpty()) {
                         val removed = String(Character.toChars(Character.codePointBefore(before, before.length)))
                         ic.deleteSurroundingTextInCodePoints(1, 0)
+                        removeLastCodePointFromSession()
                         recordUndo(removed, "")
                     }
                 }
@@ -359,6 +353,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         ic.deleteSurroundingTextInCodePoints(currentWord.codePointCount(0, currentWord.length), 0)
                         val replacement = "$autoFixed "
                         ic.commitText(replacement, 1)
+                        replaceSessionSuffix(currentWord, replacement)
                         recordUndo(currentWord, replacement)
                         userWordHistory.learn(autoFixed, previousWord.value)
                         composingWord.value = ""
@@ -384,14 +379,14 @@ class KeyboardInputMethodService : InputMethodService(),
 
                 if (isMultiline) {
                     if (noEnterAction || actionId == EditorInfo.IME_ACTION_NONE || actionId == EditorInfo.IME_ACTION_UNSPECIFIED || actionId == EditorInfo.IME_ACTION_DONE) {
-                        ic.commitText("\n", 1)
+                        if (ic.commitText("\n", 1)) appendToSession("\n")
                     } else {
                         ic.performEditorAction(actionId)
                     }
                 } else if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
                     ic.performEditorAction(actionId)
                 } else {
-                    if (!ic.commitText("\n", 1)) {
+                    if (ic.commitText("\n", 1)) appendToSession("\n") else {
                         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
                     }
@@ -424,6 +419,7 @@ class KeyboardInputMethodService : InputMethodService(),
             val start = textBefore.offsetByCodePoints(textBefore.length, -deleteCount)
             val deleted = textBefore.substring(start)
             ic.deleteSurroundingTextInCodePoints(deleteCount, 0)
+            removeFromSessionSuffix(deleted)
             recordUndo(deleted, "")
         }
         syncComposingWordFromEditor()
@@ -453,13 +449,8 @@ class KeyboardInputMethodService : InputMethodService(),
             }
         }
 
-        ic.commitText(toCommit, 1)
+        if (ic.commitText(toCommit, 1)) appendToSession(toCommit)
         recordUndo("", toCommit)
-
-        sessionCharCount += toCommit.length
-        if (toCommit.any { it == ' ' || it == '\n' || it == '.' || it == '?' || it == '!' || it == ',' }) {
-            sessionWordCount++
-        }
 
         // The editor's actual cursor/text is the source of truth; this also handles
         // selection changes, emoji, pasted text, and editor-side replacements.
@@ -473,9 +464,11 @@ class KeyboardInputMethodService : InputMethodService(),
         val currentPrefix = composingWord.value
         if (currentPrefix.isNotEmpty()) {
             ic.deleteSurroundingTextInCodePoints(currentPrefix.codePointCount(0, currentPrefix.length), 0)
+            removeFromSessionSuffix(currentPrefix)
         }
         val inserted = "$cleanWord "
         ic.commitText(inserted, 1)
+        appendToSession(inserted)
         recordUndo(currentPrefix, inserted)
         userWordHistory.learn(cleanWord, previousWord.value)
 
@@ -528,9 +521,42 @@ class KeyboardInputMethodService : InputMethodService(),
         }
         if (operation.insertedText.isNotEmpty()) {
             ic.deleteSurroundingTextInCodePoints(operation.insertedText.codePointCount(0, operation.insertedText.length), 0)
+            removeFromSessionSuffix(operation.insertedText)
         }
-        if (operation.deletedText.isNotEmpty()) ic.commitText(operation.deletedText, 1)
+        if (operation.deletedText.isNotEmpty() && ic.commitText(operation.deletedText, 1)) appendToSession(operation.deletedText)
         syncComposingWordFromEditor()
+    }
+
+    private fun appendToSession(text: String) {
+        if (sessionActive && text.isNotEmpty()) sessionText.append(text)
+    }
+
+    private fun removeFromSessionSuffix(text: String) {
+        if (!sessionActive || text.isEmpty()) return
+        if (sessionText.endsWith(text)) sessionText.setLength(sessionText.length - text.length)
+    }
+
+    private fun replaceSessionSuffix(oldText: String, newText: String) {
+        removeFromSessionSuffix(oldText)
+        appendToSession(newText)
+    }
+
+    private fun removeLastCodePointFromSession() {
+        if (!sessionActive || sessionText.isEmpty()) return
+        sessionText.setLength(sessionText.offsetByCodePoints(sessionText.length, -1))
+    }
+
+    private fun finishTypingSession() {
+        if (!sessionActive) return
+        val endedAt = System.currentTimeMillis()
+        typingActivityStore.recordSession(
+            text = sessionText.toString(),
+            startedAt = sessionStartTime,
+            endedAt = endedAt
+        )
+        sessionText.setLength(0)
+        sessionActive = false
+        sessionStartTime = 0L
     }
 
     private fun provideFeedback() {
