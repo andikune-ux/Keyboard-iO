@@ -268,13 +268,10 @@ fun KeyboardScreen(
                     updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
                 }
                 is KeyAction.Enter -> {
-                    if (translateResultText.isNotEmpty()) {
-                        onPasteText(translateResultText)
-                        translateSourceText = ""
-                    } else if (translateSourceText.isNotEmpty()) {
-                        val source = translateSourceText
+                    val textToInsert = translateResultText.ifBlank { translateSourceText }
+                    if (textToInsert.isNotBlank()) {
+                        onPasteText(textToInsert)
                         updateTranslateSource("")
-                        onPasteText(source)
                     }
                 }
                 else -> onKeyAction(action)
@@ -555,6 +552,7 @@ fun KeyboardScreen(
                 },
                 onOpenTranslate = {
                     isTranslateMode = !isTranslateMode
+                    if (!isTranslateMode) updateTranslateSource("")
                     if (activePanel == ActivePanel.TRANSLATE) activePanel = ActivePanel.NONE
                 },
                 onOpenNicknameFont = {
@@ -577,15 +575,15 @@ fun KeyboardScreen(
                     onClearText = { updateTranslateSource("") },
                     onInsertTranslation = { text ->
                         onPasteText(text)
-                        translateSourceText = ""
+                        updateTranslateSource("")
                     },
                     onPasteFromClipboard = {
                         val clip = clipboardItems.firstOrNull()?.text
                         if (!clip.isNullOrBlank()) updateTranslateSource(clip)
                     },
                     onClose = {
+                        updateTranslateSource("")
                         isTranslateMode = false
-                        translateSourceText = ""
                     }
                 )
             }

@@ -171,6 +171,22 @@ class KeyboardUnitTest {
     }
 
     @Test
+    fun offlineTranslatorPreservesPunctuationAndPerWordCase() {
+        val translated = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(
+            "SELAMAT PAGI, saya suka KOPI!"
+        )
+        assertEquals("GOOD MORNING, I like COFFEE!", translated)
+    }
+
+    @Test
+    fun offlineTranslatorMatchesPhrasesOnlyAtWordBoundaries() {
+        val translated = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(
+            "Apa kabar? Kapar"
+        )
+        assertEquals("How are you? Kapar", translated)
+    }
+
+    @Test
     fun testOfflineTranslator() {
         val translatedEn = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn("Selamat pagi")
         assertTrue(translatedEn.equals("Good morning", ignoreCase = true))

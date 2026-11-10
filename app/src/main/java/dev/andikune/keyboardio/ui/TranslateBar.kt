@@ -165,7 +165,7 @@ fun TranslateBar(
                         color = if (sourceText.isNotEmpty()) TextPrimary else TextTertiary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
+                        maxLines = 2
                     )
                 }
 
@@ -177,7 +177,7 @@ fun TranslateBar(
                     color = if (translatedText.isNotEmpty()) NeonCyan else TextTertiary,
                     fontSize = 13.sp,
                     fontWeight = if (translatedText.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1
+                    maxLines = 2
                 )
             }
 
