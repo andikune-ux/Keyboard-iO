@@ -36,6 +36,7 @@ import dev.andikune.keyboardio.data.TypingActivityStore
 import dev.andikune.keyboardio.data.TypingInputPrivacy
 import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.data.EditorTextContextSynchronizer
 import dev.andikune.keyboardio.data.UnicodeBackspaceEngine
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -71,6 +72,7 @@ class KeyboardInputMethodService : InputMethodService(),
     val editorState = MutableStateFlow(KeyboardEditorState())
     val composingWord = MutableStateFlow("")
     val previousWord = MutableStateFlow("")
+    private var editorContext = EditorTextContextSynchronizer.Snapshot.EMPTY
 
     private var audioManager: AudioManager? = null
     private var vibrator: Vibrator? = null
@@ -281,12 +283,7 @@ class KeyboardInputMethodService : InputMethodService(),
         candidatesEnd: Int
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (newSelStart == newSelEnd) {
-            syncComposingWordFromEditor()
-        } else {
-            composingWord.value = ""
-            previousWord.value = ""
-        }
+        syncComposingWordFromEditor(hasSelection = newSelStart != newSelEnd)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -369,7 +366,8 @@ class KeyboardInputMethodService : InputMethodService(),
             }
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
-                if (preferences.isAutoCorrectionEnabled() && editorState.value.isAutoCorrectionAllowed && currentWord.length >= 3) {
+                if (preferences.isAutoCorrectionEnabled() && editorState.value.isAutoCorrectionAllowed &&
+                    editorContext.cursorAtWordEnd && currentWord.length >= 3) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word
@@ -513,28 +511,41 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
         val cleanWord = word.trim('"', ' ')
-        val currentPrefix = composingWord.value
-        val deletedPrefix = currentPrefix.isNotEmpty() &&
-            ic.deleteSurroundingTextInCodePoints(currentPrefix.codePointCount(0, currentPrefix.length), 0)
-        if (deletedPrefix) removeFromSessionSuffix(currentPrefix)
-        val inserted = "$cleanWord "
-        if (ic.commitText(inserted, 1)) {
-            appendToSession(inserted)
-            recordUndo(if (deletedPrefix) currentPrefix else "", inserted)
-            userWordHistory.learn(cleanWord, previousWord.value)
+        if (cleanWord.isEmpty()) return
+
+        // Read fresh context: the editor may have moved the cursor since the
+        // suggestion strip was last recomposed.
+        val context = readEditorContext() ?: return
+        if (!context.isReliable || context.hasSelection) {
+            syncComposingWordFromEditor()
+            return
         }
 
-        composingWord.value = ""
-        previousWord.value = cleanWord.substringAfterLast(' ').lowercase(Locale.ROOT)
+        val beforeCount = context.prefixBeforeCursor.codePointCount(0, context.prefixBeforeCursor.length)
+        val afterCount = context.suffixAfterCursor.codePointCount(0, context.suffixAfterCursor.length)
+        val deletedText = context.composingWord
+        if (deletedText.isNotEmpty()) {
+            if (!ic.deleteSurroundingTextInCodePoints(beforeCount, afterCount)) {
+                syncComposingWordFromEditor()
+                return
+            }
+            removeFromSessionSuffix(deletedText)
+        }
+
+        // Do not add a space before existing punctuation or existing text.
+        val inserted = cleanWord + if (context.textAfterWord.isEmpty()) " " else ""
+        if (ic.commitText(inserted, 1)) {
+            appendToSession(inserted)
+            recordUndo(deletedText, inserted)
+            userWordHistory.learn(cleanWord, context.previousWord)
+        } else if (deletedText.isNotEmpty()) {
+            ic.commitText(deletedText, 1)
+        }
+        syncComposingWordFromEditor()
     }
 
     private fun updatePreviousWord() {
-        val ic = currentInputConnection ?: return
-        val textBefore = ic.getTextBeforeCursor(60, 0)?.toString() ?: ""
-        val trimmed = textBefore.trimEnd()
-        val lastWord = trimmed.substringAfterLast(' ', "").substringAfterLast('\n', "")
-            .filter { it.isLetter() }
-        previousWord.value = lastWord.lowercase(Locale.ROOT)
+        syncComposingWordFromEditor()
     }
 
     private fun recordUndo(deletedText: String, insertedText: String) {
@@ -549,18 +560,21 @@ class KeyboardInputMethodService : InputMethodService(),
         while (undoStack.size > MAX_UNDO_OPERATIONS) undoStack.removeAt(0)
     }
 
-    private fun syncComposingWordFromEditor() {
-        val ic = currentInputConnection ?: return
-        val before = ic.getTextBeforeCursor(80, 0)?.toString().orEmpty()
-        val current = before.takeLastWhile { it.isLetter() || it == '\'' }
-        composingWord.value = current
-        val contextBeforeCurrent = if (current.isEmpty()) before else before.dropLast(current.length)
-        previousWord.value = extractLastWord(contextBeforeCurrent)
+    private fun readEditorContext(): EditorTextContextSynchronizer.Snapshot? {
+        val ic = currentInputConnection ?: return null
+        val before = ic.getTextBeforeCursor(EditorTextContextSynchronizer.MAX_CONTEXT_CHARS, 0)?.toString().orEmpty()
+        val after = ic.getTextAfterCursor(EditorTextContextSynchronizer.MAX_CONTEXT_CHARS, 0)?.toString().orEmpty()
+        val hasSelection = !ic.getSelectedText(0).isNullOrEmpty()
+        return EditorTextContextSynchronizer.resolve(before, after, hasSelection)
     }
 
-    private fun extractLastWord(text: String): String {
-        val token = text.trimEnd().substringAfterLast(' ').substringAfterLast('\n', "")
-        return token.takeLastWhile { it.isLetter() || it == '\'' }.lowercase(Locale.ROOT)
+    private fun syncComposingWordFromEditor(hasSelection: Boolean = false) {
+        val context = readEditorContext() ?: return
+        editorContext = if (hasSelection) EditorTextContextSynchronizer.Snapshot.EMPTY else context
+        composingWord.value = editorContext.composingWord
+        previousWord.value = if (
+            editorContext.composingWord.isNotEmpty() || editorContext.canPredictNextWord
+        ) editorContext.previousWord else ""
     }
 
     private fun performUndo() {
