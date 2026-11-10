@@ -232,7 +232,6 @@ class KeyboardInputMethodService : InputMethodService(),
 
         val inputType = info?.inputType ?: 0
         val classType = inputType and InputType.TYPE_MASK_CLASS
-        val variation = inputType and InputType.TYPE_MASK_VARIATION
 
         val isPassword = TypingInputPrivacy.isPasswordInputType(inputType)
 
@@ -587,7 +586,13 @@ class KeyboardInputMethodService : InputMethodService(),
         EditorInputConnectionContextReader.read(currentInputConnection)
 
     private fun syncComposingWordFromEditor(hasSelection: Boolean = false) {
-        val context = readEditorContext() ?: return
+        val context = readEditorContext()
+        if (context == null) {
+            editorContext = EditorTextContextSynchronizer.Snapshot.EMPTY
+            composingWord.value = ""
+            previousWord.value = ""
+            return
+        }
         editorContext = if (hasSelection) EditorTextContextSynchronizer.Snapshot.EMPTY else context
         composingWord.value = editorContext.composingWord
         previousWord.value = if (
