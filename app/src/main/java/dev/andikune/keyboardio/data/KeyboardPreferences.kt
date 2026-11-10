@@ -224,6 +224,25 @@ class KeyboardPreferences(context: Context) {
     private val _customBgDim = MutableStateFlow(loadCustomBgDim())
     val customBgDim: StateFlow<Float> = _customBgDim.asStateFlow()
 
+    // Keep separate settings-screen and IME instances synchronized through SharedPreferences.
+    private val wallpaperPreferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+            when (key) {
+                "custom_bg_type" -> _customBgType.value =
+                    sharedPreferences.getString(key, "NONE") ?: "NONE"
+                "custom_bg_path" -> _customBgPath.value =
+                    sharedPreferences.getString(key, "") ?: ""
+                "custom_bg_opacity" -> _customBgOpacity.value =
+                    sharedPreferences.getFloat(key, 1f).coerceIn(0f, 1f)
+                "custom_bg_dim" -> _customBgDim.value =
+                    sharedPreferences.getFloat(key, 0f).coerceIn(0f, 0.75f)
+            }
+        }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(wallpaperPreferenceListener)
+    }
+
     fun setCustomBackground(type: String, path: String, opacity: Float = 1f, dim: Float = 0f) {
         prefs.edit()
             .putString("custom_bg_type", type)

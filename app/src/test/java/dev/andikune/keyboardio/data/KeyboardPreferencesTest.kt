@@ -88,6 +88,24 @@ class KeyboardPreferencesTest {
 
 
     @Test
+    fun wallpaperChangesFromAnotherPreferencesInstanceAreObserved() {
+        val keyboardPreferences = KeyboardPreferences(context)
+        val settingsPreferences = KeyboardPreferences(context)
+
+        settingsPreferences.setCustomBackground(
+            type = "IMAGE",
+            path = "/tmp/new-wallpaper.jpg",
+            opacity = 0.65f,
+            dim = 0.2f
+        )
+
+        assertEquals("IMAGE", keyboardPreferences.customBgType.value)
+        assertEquals("/tmp/new-wallpaper.jpg", keyboardPreferences.customBgPath.value)
+        assertEquals(0.65f, keyboardPreferences.customBgOpacity.value, 0.001f)
+        assertEquals(0.2f, keyboardPreferences.customBgDim.value, 0.001f)
+    }
+
+    @Test
     fun newBackgroundKeepsFullyTransparentOpacityInStateAndStorage() {
         val preferences = KeyboardPreferences(context)
         preferences.setCustomBackground(type = "IMAGE", path = "/tmp/wallpaper.jpg", opacity = 0f)
