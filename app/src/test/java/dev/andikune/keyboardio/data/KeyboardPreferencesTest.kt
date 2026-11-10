@@ -130,4 +130,20 @@ class KeyboardPreferencesTest {
         assertEquals(0f, KeyboardPreferences(context).customBgOpacity.value, 0.001f)
     }
 
+    @Test
+    fun keyboardHeightScaleNeverShrinksBelowFortyEightDp() {
+        val preferences = KeyboardPreferences(context)
+        preferences.setHeightScale(0.75f)
+        assertEquals(1.0f, preferences.heightScale.value, 0.001f)
+        assertEquals(1.0f, KeyboardPreferences(context).heightScale.value, 0.001f)
+    }
+
+    @Test
+    fun keyboardHeightScaleClampsToMaximumSupportedValue() {
+        val preferences = KeyboardPreferences(context)
+        preferences.setHeightScale(2.0f)
+        assertEquals(1.35f, preferences.heightScale.value, 0.001f)
+        assertEquals(1.35f, KeyboardPreferences(context).heightScale.value, 0.001f)
+    }
+
 }

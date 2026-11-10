@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
@@ -393,7 +394,8 @@ fun KeyboardScreen(
         )
     }
 
-    val baseKeyHeight = 48.dp * heightScale
+    // Enforce the 48dp minimum vertical touch target, including legacy saved scales.
+    val baseKeyHeight = maxOf(48.dp, 48.dp * heightScale)
     val enterLabel = editorState.enterAction.displayLabel
     val spaceLabel = spacebarStyle.displayLabel
 
@@ -649,7 +651,7 @@ fun KeyboardScreen(
                             onNicknameFontClick = { activePanel = ActivePanel.NICKNAME_FONT },
                             onVoiceInputClick = {
                                 activePanel = ActivePanel.VOICE_INPUT
-                                voiceInputManager?.startListening(voiceInputLanguage)
+                                voiceInputManager?.startListening()
                             },
                             onSoundClick = {
                                 activePanel = ActivePanel.SOUND_SETTINGS
@@ -739,10 +741,7 @@ fun KeyboardScreen(
                             rmsVolume = rmsVolume,
                             errorMessage = voiceErrorMessage,
                             selectedLanguage = voiceInputLanguage,
-                            onLanguageSelected = { languageTag ->
-                                preferences.setVoiceInputLanguage(languageTag)
-                                if (isVoiceListening) voiceInputManager?.startListening(languageTag)
-                            },
+                            onLanguageSelected = preferences::setVoiceInputLanguage,
                             rgbTheme = rgbTheme,
                             onStopListening = {
                                 voiceInputManager?.stopListening()
@@ -1099,7 +1098,7 @@ private fun TopHeaderBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(48.dp)
             .background(CyberDarkSurface)
             .border(0.5.dp, CyberBorder)
             .padding(horizontal = 4.dp),
@@ -1114,6 +1113,7 @@ private fun TopHeaderBar(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onOpenGridMenu)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .padding(horizontal = 5.dp, vertical = 3.dp)
                     .testTag("grid_menu_button")
             ) {
@@ -1134,7 +1134,7 @@ private fun TopHeaderBar(
             // Speech-to-Text / Voice Input Button (Tepat di samping teks iO)
             IconButton(
                 onClick = onOpenVoiceInput,
-                modifier = Modifier.size(28.dp).testTag("speech_to_text_button")
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("speech_to_text_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
@@ -1147,7 +1147,7 @@ private fun TopHeaderBar(
             // Main Emoji Icon (Samping tombol Speech-to-Text)
             IconButton(
                 onClick = onOpenEmoji,
-                modifier = Modifier.size(28.dp).testTag("main_emoji_button")
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("main_emoji_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.SentimentSatisfiedAlt,
@@ -1281,7 +1281,7 @@ private fun TopHeaderBar(
                 ) {
                     IconButton(
                         onClick = onOpenTranslate,
-                        modifier = Modifier.size(27.dp).testTag("header_translate_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_translate_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Translate,
@@ -1292,7 +1292,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onOpenNicknameFont,
-                        modifier = Modifier.size(27.dp).testTag("header_nickname_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_nickname_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
@@ -1303,7 +1303,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onQuickClipboard,
-                        modifier = Modifier.size(27.dp).testTag("header_clipboard_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_clipboard_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentPaste,
@@ -1314,7 +1314,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onUndo,
-                        modifier = Modifier.size(27.dp).testTag("header_undo_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_undo_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Undo,
@@ -1330,7 +1330,7 @@ private fun TopHeaderBar(
             IconButton(
                 onClick = onToggleTools,
                 modifier = Modifier
-                    .size(28.dp)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .testTag("tools_door_toggle_button")
             ) {
                 Icon(
@@ -1422,7 +1422,7 @@ private fun OneHandedSideBar(
     ) {
         IconButton(
             onClick = onExpand,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Fullscreen,
