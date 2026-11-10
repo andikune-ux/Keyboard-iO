@@ -94,7 +94,7 @@ class KeyboardInputMethodService : InputMethodService(),
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
         preferences = KeyboardPreferences(applicationContext)
-        clipboardRepo = ClipboardRepository(applicationContext)
+        clipboardRepo = ClipboardRepository.getInstance(applicationContext)
         userWordHistory = UserWordHistory(applicationContext)
         typingActivityStore = TypingActivityStore(applicationContext)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager

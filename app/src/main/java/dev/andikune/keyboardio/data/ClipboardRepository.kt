@@ -10,9 +10,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ClipboardRepository(context: Context) {
-    private companion object {
-        const val TAG = "ClipboardRepository"
+class ClipboardRepository internal constructor(context: Context) {
+    companion object {
+        private const val TAG = "ClipboardRepository"
+
+        @Volatile
+        private var instance: ClipboardRepository? = null
+
+        fun getInstance(context: Context): ClipboardRepository =
+            instance ?: synchronized(this) {
+                instance ?: ClipboardRepository(context.applicationContext).also { instance = it }
+            }
+
+        internal fun resetInstanceForTests() {
+            synchronized(this) { instance = null }
+        }
     }
 
     private val prefs: SharedPreferences =

@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         preferences = KeyboardPreferences(applicationContext)
-        clipboardRepo = ClipboardRepository(applicationContext)
+        clipboardRepo = ClipboardRepository.getInstance(applicationContext)
 
         setContent {
             KeyboardIOTheme {

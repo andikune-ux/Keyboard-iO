@@ -21,8 +21,19 @@ class ClipboardRepositoryTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        ClipboardRepository.resetInstanceForTests()
         context.getSharedPreferences("keyboard_io_clipboard", Context.MODE_PRIVATE)
             .edit().clear().commit()
+    }
+
+    @Test
+    fun serviceAndActivityUseOneSharedRepositoryInstance() {
+        val fromActivity = ClipboardRepository.getInstance(context)
+        val fromKeyboardService = ClipboardRepository.getInstance(context)
+        assertTrue(fromActivity === fromKeyboardService)
+
+        fromKeyboardService.addClip("shared clipboard item")
+        assertEquals("shared clipboard item", fromActivity.items.value.single().text)
     }
 
     @Test
