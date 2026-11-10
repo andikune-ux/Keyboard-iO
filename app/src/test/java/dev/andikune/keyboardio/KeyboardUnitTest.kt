@@ -217,5 +217,9 @@ class KeyboardUnitTest {
             dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC xyz 123", "fullwidth")
                 .contains("ＡＢＣ")
         )
+        assertEquals(
+            "ɔqɐ",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC", "upside_down")
+        )
     }
 }

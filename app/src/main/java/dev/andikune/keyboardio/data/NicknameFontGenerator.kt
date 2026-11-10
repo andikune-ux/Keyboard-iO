@@ -34,6 +34,15 @@ object NicknameFontGenerator {
             for (ch in input) append(mapping[ch] ?: ch.toString())
         }
 
+    private fun reverseCodePoints(input: String): String = buildString {
+        var offset = input.length
+        while (offset > 0) {
+            val codePoint = Character.codePointBefore(input, offset)
+            appendCodePoint(codePoint)
+            offset -= Character.charCount(codePoint)
+        }
+    }
+
     val STYLES = listOf(
         NicknameStyle(
             id = "gothic",
@@ -256,12 +265,14 @@ object NicknameFontGenerator {
         NicknameStyle(
             id = "upside_down",
             name = "Upside Down",
-            previewSample = "pɹɐoqʎǝʞ",
+            previewSample = "Oı pɹɐoqʎǝʞ",
             transform = { text ->
-                mapChars(
-                    text,
-                    "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz",
-                    "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz"
+                reverseCodePoints(
+                    mapChars(
+                        text,
+                        "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz",
+                        "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz"
+                    )
                 )
             }
         ),
@@ -287,7 +298,7 @@ object NicknameFontGenerator {
         NicknameStyle(
             id = "subscript",
             name = "Subscript",
-            previewSample = "ₖₑᵧᵦₒₐᵣ𝒹",
+            previewSample = "ₖₑᵧᵦₒₐᵣd",
             transform = { text ->
                 mapAvailableCharacters(
                     text,
