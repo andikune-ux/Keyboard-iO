@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
+import dev.andikune.keyboardio.data.LongTextChunker
 import dev.andikune.keyboardio.data.SmartDeleteEngine
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.TypingActivityStore
@@ -467,9 +468,19 @@ class KeyboardInputMethodService : InputMethodService(),
             }
         }
 
-        if (ic.commitText(toCommit, 1)) {
-            appendToSession(toCommit)
-            recordUndo("", toCommit)
+        // Large clipboard/paste payloads are sent in bounded transactions to avoid
+        // Binder transaction limits. Chunk boundaries never split UTF-16 surrogate pairs.
+        val chunks = LongTextChunker.split(toCommit)
+        val inserted = StringBuilder(toCommit.length)
+        for (chunk in chunks) {
+            val committed = runCatching { ic.commitText(chunk, 1) }.getOrDefault(false)
+            if (!committed) break
+            inserted.append(chunk)
+        }
+        if (inserted.isNotEmpty()) {
+            val insertedText = inserted.toString()
+            appendToSession(insertedText)
+            recordUndo("", insertedText)
         }
 
         // The editor's actual cursor/text is the source of truth; this also handles

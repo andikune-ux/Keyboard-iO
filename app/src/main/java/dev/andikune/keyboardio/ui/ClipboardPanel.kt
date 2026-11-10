@@ -65,6 +65,7 @@ fun ClipboardPanel(
     modifier: Modifier = Modifier
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var expandedItemIds by remember { mutableStateOf(emptySet<Long>()) }
 
     if (showClearConfirmation) {
         AlertDialog(
@@ -153,6 +154,7 @@ fun ClipboardPanel(
             ) {
                 items(items, key = { it.id }) { item ->
                     val shape = RoundedCornerShape(8.dp)
+                    val isExpanded = item.id in expandedItemIds
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -163,18 +165,30 @@ fun ClipboardPanel(
                                 color = if (item.isPinned) rgbTheme.primary.copy(alpha = 0.6f) else CyberBorder,
                                 shape = shape
                             )
-                            .clickable { onPasteText(item.text) }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = item.text,
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f).clickable { onPasteText(item.text) }
+                        ) {
+                            Text(
+                                text = item.text,
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                maxLines = if (isExpanded) Int.MAX_VALUE else 2,
+                                overflow = if (isExpanded) TextOverflow.Clip else TextOverflow.Ellipsis
+                            )
+                            if (item.text.length > 120) {
+                                Text(
+                                    text = if (isExpanded) "Ketuk untuk tempel teks lengkap • Tutup pratinjau" else "${item.text.length} karakter • Ketuk untuk tempel seluruh teks / buka pratinjau",
+                                    color = TextTertiary,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.clickable {
+                                        expandedItemIds = if (isExpanded) expandedItemIds - item.id else expandedItemIds + item.id
+                                    }.padding(top = 3.dp)
+                                )
+                            }
+                        }
 
                         IconButton(
                             onClick = { onTogglePin(item.id) },
