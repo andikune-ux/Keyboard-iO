@@ -14,6 +14,7 @@ class QuickCalculatorTest {
     @Test fun supportsDecimalCommaAndRemainder() {
         assertEquals("2.5", QuickCalculator.evaluate("7,5 % 5"))
         assertEquals("3.75", QuickCalculator.evaluate("1,5 + 2.25"))
+        assertEquals("3.75", QuickCalculator.evaluate("1,5 + 2,25"))
     }
     @Test fun rejectsDivisionByZeroAndMalformedExpressions() {
         assertNull(QuickCalculator.evaluate("5 / 0"))
@@ -32,5 +33,11 @@ class QuickCalculatorTest {
         assertEquals("0.3", QuickCalculator.evaluate("0.1 + 0.2"))
         assertEquals("0.3", QuickCalculator.evaluate("0.9 / 3"))
         assertEquals("0", QuickCalculator.evaluate("-0"))
+    }
+    @Test fun divisionUsesThirtyFourSignificantDigits() {
+        assertEquals(
+            "0.1428571428571428571428571428571429",
+            QuickCalculator.evaluate("1 / 7")
+        )
     }
 }

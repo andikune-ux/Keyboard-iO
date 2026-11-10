@@ -5,7 +5,7 @@ import java.math.MathContext
 
 /**
  * Side-effect-free arithmetic parser. Never evaluates user input as code.
- * Supports +, -, *, /, %, parentheses, decimals and unary signs.
+ * Supports +, -, *, /, remainder (%), parentheses, decimals and unary signs.
  */
 object QuickCalculator {
     fun evaluate(expression: String): String? {
@@ -48,7 +48,7 @@ object QuickCalculator {
                     consume('/') -> {
                         val divisor = parseUnary()
                         require(divisor.compareTo(BigDecimal.ZERO) != 0) { "Division by zero" }
-                        value.divide(divisor, MathContext.DECIMAL64)
+                        value.divide(divisor, MathContext.DECIMAL128)
                     }
                     consume('%') -> {
                         val divisor = parseUnary()

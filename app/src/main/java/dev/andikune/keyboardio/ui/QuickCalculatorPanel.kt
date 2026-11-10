@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -55,7 +56,7 @@ fun QuickCalculatorPanel(
         listOf("7", "8", "9", "÷"),
         listOf("4", "5", "6", "×"),
         listOf("1", "2", "3", "−"),
-        listOf("0", ".", "%", "+")
+        listOf("0", ",", "%", "+")
     )
     fun append(token: String) {
         val value = when (token) {
@@ -82,7 +83,11 @@ fun QuickCalculatorPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Kalkulator Cepat", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(Icons.Default.Close, contentDescription = "Tutup kalkulator", tint = TextSecondary)
             }
         }
@@ -107,9 +112,10 @@ fun QuickCalculatorPanel(
                     val selected = token in listOf("÷", "×", "−", "+", "%")
                     Box(
                         modifier = Modifier.weight(1f).padding(vertical = 3.dp)
+                            .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (selected) rgbTheme.primary.copy(alpha = 0.18f) else CyberKeyBg)
-                            .clickable { append(token) }.padding(vertical = 10.dp),
+                            .clickable { append(token) },
                         contentAlignment = Alignment.Center
                     ) {
                         if (token == "⌫") Icon(Icons.Default.Backspace, contentDescription = "Hapus satu karakter", tint = TextPrimary)
@@ -121,18 +127,21 @@ fun QuickCalculatorPanel(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
-                    .background(CyberKeyBg).clickable { append("C") }.padding(vertical = 12.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
+                    .background(CyberKeyBg).clickable { append("C") },
                 contentAlignment = Alignment.Center
             ) { Text("Bersihkan", color = TextPrimary, fontSize = 12.sp) }
             Box(
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
-                    .background(rgbTheme.primary).clickable { if (result != null) onInsertResult(result) }
-                    .padding(vertical = 12.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (result != null) rgbTheme.primary else rgbTheme.primary.copy(alpha = 0.25f))
+                    .clickable(enabled = result != null) { result?.let(onInsertResult) },
                 contentAlignment = Alignment.Center
-            ) { Text("Masukkan hasil", color = CyberDarkSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            ) {
+                Text("Masukkan hasil", color = if (result != null) CyberDarkSurface else TextSecondary,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
         }
-        Text("Mendukung +, −, ×, ÷, %, desimal, dan tanda kurung.",
+        Text("Mendukung +, −, ×, ÷, sisa bagi (%), desimal koma/titik, dan tanda kurung.",
             color = TextSecondary, fontSize = 10.sp, modifier = Modifier.padding(top = 7.dp))
     }
 }
