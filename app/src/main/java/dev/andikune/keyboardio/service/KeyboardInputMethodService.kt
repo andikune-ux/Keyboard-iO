@@ -461,12 +461,9 @@ class KeyboardInputMethodService : InputMethodService(),
             sessionWordCount++
         }
 
-        if (toCommit.length == 1 && toCommit[0].isLetter()) {
-            composingWord.value += toCommit
-        } else {
-            composingWord.value = ""
-            updatePreviousWord()
-        }
+        // The editor's actual cursor/text is the source of truth; this also handles
+        // selection changes, emoji, pasted text, and editor-side replacements.
+        syncComposingWordFromEditor()
     }
 
     private fun handleSuggestionPicked(word: String) {

@@ -30,7 +30,7 @@ class UserWordHistory(context: Context) {
             val nextCounts = updated.getOrPut(previous) { mutableMapOf() }
             nextCounts[word] = (nextCounts[word] ?: 0) + 1
             updated[previous] = nextCounts.entries.sortedByDescending { it.value }
-                .take(MAX_NEXT_WORDS).associate { it.key to it.value }
+                .take(MAX_NEXT_WORDS).associate { it.key to it.value }.toMutableMap()
 
             val retainedPairs = updated.flatMap { (before, next) ->
                 next.map { (after, count) -> Triple(before, after, count) }
