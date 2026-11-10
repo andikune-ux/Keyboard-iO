@@ -64,6 +64,7 @@ data class KeyboardEditorState(
     val isPassword: Boolean = false,
     val isNumberOnly: Boolean = false,
     val isAutoCorrectionAllowed: Boolean = true,
+    val isSuggestionsAllowed: Boolean = true,
     val enterAction: EnterActionType = EnterActionType.RETURN
 )
 
