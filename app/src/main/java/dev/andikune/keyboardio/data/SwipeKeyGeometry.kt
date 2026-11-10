@@ -12,7 +12,7 @@ object SwipeKeyGeometry {
         return when (row) {
             0 -> findLetter(position, 0f, "qwertyuiop", List(10) { 1f })
             1 -> findLetter(position, 0.5f, "asdfghjkl", List(9) { 1f })
-            2 -> findLetter(position, 0f, "zxcvbnm", listOf(1.5f) + List(7) { 1f } + 1.5f)
+            2 -> findLetter(position, 1.5f, "zxcvbnm", List(7) { 1f })
             else -> null
         }
     }
