@@ -270,6 +270,8 @@ class KeyboardPreferences(context: Context) {
                     sharedPreferences.getFloat(key, 1f).coerceIn(0f, 1f)
                 "custom_bg_dim" -> _customBgDim.value =
                     sharedPreferences.getFloat(key, 0f).coerceIn(0f, 0.75f)
+                "clipboard_private_mode" -> _clipboardPrivateMode.value =
+                    sharedPreferences.getBoolean(key, false)
             }
         }
 

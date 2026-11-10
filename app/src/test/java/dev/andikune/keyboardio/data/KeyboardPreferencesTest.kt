@@ -33,6 +33,18 @@ class KeyboardPreferencesTest {
     }
 
     @Test
+    fun clipboardPrivateModeChangesAreObservedAcrossPreferencesInstances() {
+        val imePreferences = KeyboardPreferences(context)
+        val settingsPreferences = KeyboardPreferences(context)
+
+        settingsPreferences.setClipboardPrivateMode(true)
+        assertEquals(true, imePreferences.clipboardPrivateMode.value)
+
+        settingsPreferences.setClipboardPrivateMode(false)
+        assertEquals(false, imePreferences.clipboardPrivateMode.value)
+    }
+
+    @Test
     fun voiceLanguageDefaultsToSystemAndPersistsExplicitChoice() {
         val preferences = KeyboardPreferences(context)
         assertEquals("SYSTEM", preferences.voiceInputLanguage.value)
