@@ -649,7 +649,7 @@ fun KeyboardScreen(
                             onNicknameFontClick = { activePanel = ActivePanel.NICKNAME_FONT },
                             onVoiceInputClick = {
                                 activePanel = ActivePanel.VOICE_INPUT
-                                voiceInputManager?.startListening()
+                                voiceInputManager?.startListening(voiceInputLanguage)
                             },
                             onSoundClick = {
                                 activePanel = ActivePanel.SOUND_SETTINGS
