@@ -1438,12 +1438,23 @@ private fun SafeVideoBackground(
                                     setSurface(videoSurface)
                                     isLooping = true
                                     setVolume(0f, 0f)
+                                    // Match image ContentScale.Crop so videos keep their aspect ratio
+                                    // instead of stretching to the keyboard's dimensions.
+                                    setVideoScalingMode(
+                                        MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                                    )
                                     setOnErrorListener { player, _, _ ->
                                         if (mediaPlayer === player) mediaPlayer = null
                                         runCatching { player.release() }
                                         true
                                     }
-                                    setOnPreparedListener { player -> player.start() }
+                                    setOnPreparedListener { player ->
+                                        runCatching { player.start() }
+                                            .onFailure {
+                                                if (mediaPlayer === player) mediaPlayer = null
+                                                runCatching { player.release() }
+                                            }
+                                    }
                                     prepareAsync()
                                 }
                             }.onFailure {
