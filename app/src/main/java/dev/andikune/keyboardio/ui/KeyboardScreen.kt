@@ -1211,7 +1211,7 @@ private fun TopHeaderBar(
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            val cleanDisplay = clipboardSuggestion.take(15).replace('\\n', ' ')
+                            val cleanDisplay = clipboardSuggestion.take(15).replace('\n', ' ')
                             Text(
                                 text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
                                 color = TextPrimary,
