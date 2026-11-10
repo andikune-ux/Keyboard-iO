@@ -194,6 +194,12 @@ class KeyboardInputMethodService : InputMethodService(),
         }
     }
 
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        // Recognition results belong to the editor that started the session.
+        voiceInputManager?.cancelListening()
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -279,6 +285,8 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        // Prevent delayed callbacks from committing after the keyboard is hidden.
+        voiceInputManager?.cancelListening()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         composingWord.value = ""
