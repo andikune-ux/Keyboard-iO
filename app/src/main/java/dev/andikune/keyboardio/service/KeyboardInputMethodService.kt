@@ -155,6 +155,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         composingWordFlow = composingWord,
                         previousWordFlow = previousWord,
                         userWordHistoryFlow = userWordHistory.words,
+                        userWordBigramsFlow = userWordHistory.bigrams,
                         typingActivityStore = typingActivityStore,
                         voiceInputManager = voiceInputManager,
                         audioFeedback = audioFeedback,
@@ -265,7 +266,7 @@ class KeyboardInputMethodService : InputMethodService(),
             syncComposingWordFromEditor()
         } else {
             composingWord.value = ""
-            updatePreviousWord()
+            previousWord.value = ""
         }
     }
 
