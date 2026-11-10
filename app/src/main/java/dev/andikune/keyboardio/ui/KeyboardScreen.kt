@@ -177,7 +177,13 @@ fun KeyboardScreen(
             ?: remember { mutableStateOf(emptyList<TypingSessionRecord>()) }
         )
     val typingStats = remember(typingSessions) {
-        typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
+        TypingActivityStats(
+            totalCharacters = typingSessions.sumOf { it.charCount },
+            totalWords = typingSessions.sumOf { it.wordCount },
+            totalSessions = typingSessions.size,
+            totalDurationMs = typingSessions.sumOf { it.durationMs },
+            sessions = typingSessions
+        )
     }
     LaunchedEffect(typingSessions, typingActivityStore) {
         val nextExpiry = typingSessions.minOfOrNull { it.createdAt + 24 * 60 * 60 * 1000L }
