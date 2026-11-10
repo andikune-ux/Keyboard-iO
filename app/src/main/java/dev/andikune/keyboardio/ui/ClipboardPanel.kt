@@ -25,10 +25,16 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,8 +62,31 @@ fun ClipboardPanel(
     onDeleteItem: (Long) -> Unit,
     onClearAll: () -> Unit,
     onClose: () -> Unit,
+    isPrivateMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    var showClearConfirmation by remember { mutableStateOf(false) }
+    var expandedItemIds by remember { mutableStateOf(emptySet<Long>()) }
+
+    if (showClearConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmation = false },
+            title = { Text("Hapus riwayat clipboard?") },
+            text = {
+                Text("Semua item yang tidak disematkan akan dihapus. Item yang disematkan tetap tersimpan. Tindakan ini tidak dapat dibatalkan.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onClearAll()
+                    showClearConfirmation = false
+                }) { Text("Hapus") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmation = false }) { Text("Batal") }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -92,14 +121,23 @@ fun ClipboardPanel(
             }
 
             if (items.any { !it.isPinned }) {
-                IconButton(onClick = onClearAll, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { showClearConfirmation = true }, modifier = Modifier.size(32.dp)) {
                     Icon(
                         imageVector = Icons.Default.ClearAll,
-                        contentDescription = "Hapus Riwayat",
+                        contentDescription = "Hapus riwayat yang tidak disematkan",
                         tint = TextSecondary
                     )
                 }
             }
+        }
+
+        if (isPrivateMode) {
+            Text(
+                text = "Mode privat aktif — salinan baru tidak direkam. Riwayat lama tetap tersimpan.",
+                color = rgbTheme.secondary,
+                fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+            )
         }
 
         if (items.isEmpty()) {
@@ -126,6 +164,7 @@ fun ClipboardPanel(
             ) {
                 items(items, key = { it.id }) { item ->
                     val shape = RoundedCornerShape(8.dp)
+                    val isExpanded = item.id in expandedItemIds
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -136,18 +175,30 @@ fun ClipboardPanel(
                                 color = if (item.isPinned) rgbTheme.primary.copy(alpha = 0.6f) else CyberBorder,
                                 shape = shape
                             )
-                            .clickable { onPasteText(item.text) }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = item.text,
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f).clickable { onPasteText(item.text) }
+                        ) {
+                            Text(
+                                text = item.text,
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                maxLines = if (isExpanded) Int.MAX_VALUE else 2,
+                                overflow = if (isExpanded) TextOverflow.Clip else TextOverflow.Ellipsis
+                            )
+                            if (item.text.length > 120) {
+                                Text(
+                                    text = if (isExpanded) "Ketuk untuk tempel teks lengkap • Tutup pratinjau" else "${item.text.length} karakter • Ketuk untuk tempel seluruh teks / buka pratinjau",
+                                    color = TextTertiary,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.clickable {
+                                        expandedItemIds = if (isExpanded) expandedItemIds - item.id else expandedItemIds + item.id
+                                    }.padding(top = 3.dp)
+                                )
+                            }
+                        }
 
                         IconButton(
                             onClick = { onTogglePin(item.id) },

@@ -2,7 +2,7 @@ name: Android CI/CD Build - Keyboard iO
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "quality/keyboard-io-typing-fixes" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
@@ -24,6 +24,9 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Unit Tests
+        run: gradle testDebugUnitTest --stacktrace
 
       - name: Build Release APK (unsigned)
         run: gradle assembleRelease --stacktrace

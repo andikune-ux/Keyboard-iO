@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.andikune.keyboardio.data.OfflineTranslator
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import dev.andikune.keyboardio.ui.theme.CyberBlack
 import dev.andikune.keyboardio.ui.theme.CyberBorder
@@ -63,6 +64,8 @@ fun TranslateBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val canInsertTranslation = OfflineTranslator.hasMeaningfulTranslation(sourceText, translatedText)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -165,7 +168,7 @@ fun TranslateBar(
                         color = if (sourceText.isNotEmpty()) TextPrimary else TextTertiary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
+                        maxLines = 2
                     )
                 }
 
@@ -177,7 +180,7 @@ fun TranslateBar(
                     color = if (translatedText.isNotEmpty()) NeonCyan else TextTertiary,
                     fontSize = 13.sp,
                     fontWeight = if (translatedText.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1
+                    maxLines = 2
                 )
             }
 
@@ -215,14 +218,11 @@ fun TranslateBar(
 
                 Button(
                     onClick = {
-                        if (translatedText.isNotEmpty()) {
-                            onInsertTranslation(translatedText)
-                        } else if (sourceText.isNotEmpty()) {
-                            onInsertTranslation(sourceText)
-                        }
+                        if (canInsertTranslation) onInsertTranslation(translatedText)
                     },
+                    enabled = canInsertTranslation,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (translatedText.isNotEmpty()) rgbTheme.primary else CyberCard
+                        containerColor = if (canInsertTranslation) rgbTheme.primary else CyberCard
                     ),
                     shape = RoundedCornerShape(6.dp),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -231,13 +231,13 @@ fun TranslateBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = null,
-                        tint = if (translatedText.isNotEmpty()) CyberBlack else TextTertiary,
+                        tint = if (canInsertTranslation) CyberBlack else TextTertiary,
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Tempel",
-                        color = if (translatedText.isNotEmpty()) CyberBlack else TextTertiary,
+                        color = if (canInsertTranslation) CyberBlack else TextTertiary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

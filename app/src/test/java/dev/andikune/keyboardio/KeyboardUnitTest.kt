@@ -6,6 +6,7 @@ import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,7 +91,7 @@ class KeyboardUnitTest {
 
         // Next word predictions: returns top starters when previous word is blank
         val nextWordBlank = WordSuggester.getNextWordPredictions("")
-        assertTrue(nextWordBlank.isNotEmpty())
+        assertTrue(nextWordBlank.isEmpty())
 
         val suggestions = WordSuggester.getWordCompletionsAndCorrections("kam")
         assertTrue(suggestions.isNotEmpty())
@@ -99,9 +100,20 @@ class KeyboardUnitTest {
         val engSuggestions = WordSuggester.getWordCompletionsAndCorrections("hel")
         assertTrue(engSuggestions.any { it.contains("hel", ignoreCase = true) })
 
-        // Typo correction test: "kmu" -> "kamu"
+        // Exact user text is always preserved as the first suggestion.
+        assertEquals("kam", WordSuggester.getWordCompletionsAndCorrections("kam").first())
+        assertTrue(WordSuggester.getNextWordPredictions("").isEmpty())
+        val personalPredictions = WordSuggester.getNextWordPredictions(
+            "saya",
+            learnedBigrams = mapOf("saya" to mapOf("ngopi" to 12, "makan" to 2))
+        )
+        assertEquals("ngopi", personalPredictions.first())
         val corrected = WordSuggester.findAutoCorrection("kmu")
         assertEquals("kamu", corrected)
+        assertEquals(null, WordSuggester.findAutoCorrection("keyboard", mapOf("keyboard" to 20)))
+        assertEquals(null, WordSuggester.findAutoCorrection("Andi"))
+        assertEquals("kamu", WordSuggester.getSwipeSuggestion("kamu"))
+        assertEquals(null, WordSuggester.findAutoCorrection("Kmu"))
     }
 
     @Test
@@ -135,6 +147,59 @@ class KeyboardUnitTest {
         val wordText = "Halo dunia"
         val countWord = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(wordText)
         assertEquals("dunia".length, countWord)
+
+        // Unicode emoji is one code point, not two UTF-16 code units.
+        assertEquals(1, dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount("Halo 😀"))
+    }
+
+    @Test
+    fun testTypingSessionRecordStoresFullUnicodeTextAndTimes() {
+        val text = "Halo 😀\nIni seluruh teks yang diketik."
+        val start = 1_800_000_000_000L
+        val end = start + 95_000L
+        val session = dev.andikune.keyboardio.data.TypingSessionRecord(
+            startedAt = start,
+            endedAt = end,
+            createdAt = end,
+            text = text
+        )
+        assertEquals(text, session.text)
+        assertEquals(start, session.startedAt)
+        assertEquals(end, session.endedAt)
+        assertEquals(text.codePointCount(0, text.length), session.charCount)
+        assertEquals(95_000L, session.durationMs)
+    }
+
+    @Test
+    fun offlineTranslatorPreservesPunctuationAndPerWordCase() {
+        val translated = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(
+            "SELAMAT PAGI, saya suka KOPI!"
+        )
+        assertEquals("GOOD MORNING, I like COFFEE!", translated)
+    }
+
+    @Test
+    fun offlineTranslatorMatchesPhrasesOnlyAtWordBoundaries() {
+        val translated = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(
+            "Apa kabar? Kapar"
+        )
+        assertEquals("How are you? Kapar", translated)
+    }
+
+    @Test
+    fun offlineTranslationRequiresARealDictionaryChangeBeforeInsert() {
+        val unknown = "qwerty zxv"
+        val unknownResult = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(unknown)
+        assertEquals(unknown, unknownResult)
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation(unknown, unknownResult))
+
+        val known = "selamat pagi"
+        val knownResult = dev.andikune.keyboardio.data.OfflineTranslator.translateIdToEn(known)
+        assertEquals("good morning", knownResult.lowercase())
+        assertTrue(dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation(known, knownResult))
+
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation("", ""))
+        assertTrue(!dev.andikune.keyboardio.data.OfflineTranslator.hasMeaningfulTranslation("HELLO", "hello"))
     }
 
     @Test
@@ -155,19 +220,65 @@ class KeyboardUnitTest {
     fun testLearnedWordsRankSuggestionsAndCorrection() {
         val learned = mapOf("kamar" to 20, "kami" to 1)
         val suggestions = WordSuggester.getSuggestions("kam", learnedWords = learned)
-        assertEquals("kamar", suggestions.first())
+        assertEquals("kam", suggestions.first())
+        assertTrue(suggestions.contains("kamar"))
         assertEquals("kamu", WordSuggester.findAutoCorrection("kmu", learned))
         assertEquals(null, WordSuggester.findAutoCorrection("teh", learned))
     }
 
     @Test
-    fun testNicknameFontGenerator() {
-        val sample = "Andik"
-        val sultan = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gamer_wing")
-        assertTrue(sultan.contains("Andik"))
+    fun testNicknameFontGeneratorSupportsExpandedUnicodeStyles() {
+        val sample = "Keyboard iO 123 😀 café"
+        val styles = dev.andikune.keyboardio.data.NicknameFontGenerator.STYLES
+        assertTrue(styles.size >= 20)
+        assertEquals(styles.size, styles.map { it.id }.distinct().size)
 
-        val gothic = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "gothic")
-        assertNotNull(gothic)
-        assertTrue(gothic.isNotEmpty())
+        styles.forEach { style ->
+            val converted = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, style.id)
+            assertNotNull(converted)
+            assertNotEquals("Style ${style.id} should transform the sample", sample, converted)
+            assertTrue("Style ${style.id} should keep emoji", converted.contains("😀"))
+            assertTrue("Style ${style.id} should keep spaces", converted.contains(" "))
+        }
+
+        assertEquals(
+            sample,
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, "unknown-style")
+        )
+        assertTrue(
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC xyz 123", "fullwidth")
+                .contains("ＡＢＣ")
+        )
+        assertEquals(
+            "ɔqɐ",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC", "upside_down")
+        )
+        assertEquals(
+            "🄺🄴🅈🄱🄾🄰🅁🄳",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Keyboard", "squared")
+        )
+        assertEquals(
+            "🅺🅴🆈🅱🅾🅰🆁🅳",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Keyboard", "negative_squared")
+        )
+        assertEquals(
+            "ⓐⓑ",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Ab", "parenthesized")
+        )
+        assertEquals(
+            "🇦🇧",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("AB", "regional_indicator")
+        )
+
+        // Upside-down conversion must reverse visible clusters, not detach combining marks.
+        assertEquals(
+            "qɐ\u0301",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("A\u0301B", "upside_down")
+        )
+        val familyEmoji = "👨‍👩‍👧‍👦"
+        assertEquals(
+            "ɐ$familyEmoji",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("$familyEmoji" + "A", "upside_down")
+        )
     }
 }

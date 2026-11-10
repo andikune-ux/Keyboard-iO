@@ -4,6 +4,9 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -66,6 +69,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -147,7 +151,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         preferences = KeyboardPreferences(applicationContext)
-        clipboardRepo = ClipboardRepository(applicationContext)
+        clipboardRepo = ClipboardRepository.getInstance(applicationContext)
 
         setContent {
             KeyboardIOTheme {
@@ -255,6 +259,7 @@ fun MainScreen(
     val soundEnabled by preferences.keySound.collectAsState()
     val longPressDelay by preferences.longPressDelay.collectAsState()
     val clipboardList by clipboardRepo.items.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
 
     fun checkKeyboardStatus() {
         runCatching {
@@ -395,6 +400,7 @@ fun MainScreen(
                 2 -> ClipboardTab(
                     items = clipboardList,
                     rgbTheme = rgbTheme,
+                    isPrivateMode = clipboardPrivateMode,
                     onTogglePin = { clipboardRepo.togglePin(it) },
                     onDeleteItem = { clipboardRepo.removeItem(it) },
                     onClearAll = { clipboardRepo.clearUnpinned() }
@@ -702,6 +708,7 @@ private fun CustomizationTab(
     val swipeTyping by preferences.swipeTyping.collectAsState()
     val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
     val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
     val customBgType by preferences.customBgType.collectAsState()
     val customBgPath by preferences.customBgPath.collectAsState()
     val customBgOpacity by preferences.customBgOpacity.collectAsState()
@@ -718,24 +725,112 @@ private fun CustomizationTab(
     ) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
+                var pendingTempFile: File? = null
+                var pendingDestinationFile: File? = null
                 runCatching {
-                    val mimeType = context.contentResolver.getType(uri).orEmpty()
-                    val isVideo = mimeType.startsWith("video")
-                    val fileName = if (isVideo) "custom_keyboard_bg.mp4" else "custom_keyboard_bg.jpg"
-                    val destFile = File(context.filesDir, fileName)
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(destFile).use { output ->
-                            input.copyTo(output)
-                        }
+                    val mimeType = context.contentResolver.getType(uri)
+                        ?.substringBefore(';')
+                        ?.trim()
+                        ?.lowercase(Locale.ROOT)
+                        .orEmpty()
+                    val isVideo = when {
+                        mimeType.startsWith("video/") -> true
+                        mimeType.startsWith("image/") -> false
+                        else -> throw IllegalArgumentException(
+                            "Format wallpaper tidak dikenali. Pilih file gambar atau video yang didukung."
+                        )
                     }
+                    // Unique path forces Compose to reload replaced wallpaper media.
+                    val fileId = java.util.UUID.randomUUID().toString()
+                    val extension = if (isVideo) "mp4" else "img"
+                    val fileName = "custom_keyboard_bg_$fileId.$extension"
+                    val destFile = File(context.filesDir, fileName)
+                    val tempFile = File(context.filesDir, "$fileName.tmp")
+                    pendingTempFile = tempFile
+                    pendingDestinationFile = destFile
+                    val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output)
+                            output.fd.sync()
+                        }
+                        true
+                    } ?: false
+                    if (!copied || !tempFile.exists() || tempFile.length() == 0L) {
+                        tempFile.delete()
+                        throw IllegalStateException("File media kosong atau tidak dapat dibaca.")
+                    }
+                    if (!tempFile.renameTo(destFile)) {
+                        tempFile.copyTo(destFile, overwrite = true)
+                        tempFile.delete()
+                    }
+
+                    // Reject corrupt or mislabeled media before replacing the current wallpaper.
+                    if (isVideo) {
+                        val retriever = MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(destFile.absolutePath)
+                            val width = retriever.extractMetadata(
+                                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                            )?.toIntOrNull() ?: 0
+                            val height = retriever.extractMetadata(
+                                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                            )?.toIntOrNull() ?: 0
+                            if (width <= 0 || height <= 0) {
+                                throw IllegalArgumentException("Video tidak valid atau tidak didukung.")
+                            }
+                        } finally {
+                            retriever.release()
+                        }
+                    } else {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(destFile.absolutePath, bounds)
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                            throw IllegalArgumentException("Gambar rusak atau tidak didukung.")
+                        }
+                        val sampleSize = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 512)
+                        val decoded = BitmapFactory.decodeFile(
+                            destFile.absolutePath,
+                            BitmapFactory.Options().apply {
+                                inSampleSize = sampleSize
+                                inPreferredConfig = Bitmap.Config.RGB_565
+                            }
+                        ) ?: throw IllegalArgumentException("Gambar tidak dapat didekode.")
+                        decoded.recycle()
+                    }
+
                     preferences.setCustomBackground(
                         type = if (isVideo) "VIDEO" else "IMAGE",
                         path = destFile.absolutePath,
-                        opacity = 0.45f,
-                        dim = 0.5f
+                        opacity = 1f,
+                        dim = 0f
                     )
+
+                    // Keep replaced media briefly so an IME renderer finishing its
+                    // transition can release the old file before it is deleted.
+                    val cleanupBefore = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+                    context.filesDir.listFiles()
+                        ?.filter { candidate ->
+                            candidate.isFile &&
+                                candidate.name.startsWith("custom_keyboard_bg_") &&
+                                candidate.extension in setOf("img", "mp4") &&
+                                candidate.absolutePath != destFile.absolutePath &&
+                                candidate.lastModified() < cleanupBefore
+                        }
+                        ?.forEach { candidate -> candidate.delete() }
+
+                    pendingTempFile = null
+                    pendingDestinationFile = null
                 }.onFailure {
+                    pendingTempFile?.delete()
+                    pendingDestinationFile?.delete()
                     Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            "Gagal memuat wallpaper. Coba pilih file foto/video lain.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
@@ -921,35 +1016,131 @@ private fun CustomizationTab(
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Transparansi / Opacity Media: ${(customBgOpacity * 100).toInt()}%",
+                            text = "Keterlihatan Foto/Video: ${(customBgOpacity * 100).toInt()}%",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
                         Slider(
                             value = customBgOpacity,
                             onValueChange = { preferences.setCustomBgOpacity(it) },
-                            valueRange = 0.1f..1.0f,
+                            valueRange = 0.0f..1.0f,
                             colors = SliderDefaults.colors(
                                 thumbColor = rgbTheme.primary,
                                 activeTrackColor = rgbTheme.primary
                             )
                         )
+                        Text(
+                            text = "100% = media terlihat penuh; 0% = media tidak terlihat.",
+                            color = TextTertiary,
+                            fontSize = 10.sp
+                        )
 
                         Text(
-                            text = "Lapisan Redup / Dimming Gelap: ${(customBgDim * 100).toInt()}%",
+                            text = "Lapisan Gelap: ${(customBgDim * 100).toInt()}%",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
                         Slider(
                             value = customBgDim,
                             onValueChange = { preferences.setCustomBgDim(it) },
-                            valueRange = 0.0f..0.9f,
+                            valueRange = 0.0f..0.75f,
                             colors = SliderDefaults.colors(
                                 thumbColor = rgbTheme.secondary,
                                 activeTrackColor = rgbTheme.secondary
                             )
                         )
+                        Text(
+                            text = "0% = tanpa lapisan gelap. Gunakan nilai kecil agar foto/video tetap jelas.",
+                            color = TextTertiary,
+                            fontSize = 10.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Preset cepat", color = TextSecondary, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(1f)
+                                    preferences.setCustomBgDim(0f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Terang", fontSize = 10.sp) }
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(0.95f)
+                                    preferences.setCustomBgDim(0.03f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Seimbang", fontSize = 10.sp) }
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(0.85f)
+                                    preferences.setCustomBgDim(0.18f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Redup", fontSize = 10.sp) }
+                        }
                     }
+                }
+            }
+        }
+
+        // Clipboard privacy: pauses new capture without deleting existing history.
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = rgbTheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Mode Privat Clipboard",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (clipboardPrivateMode)
+                                "Aktif: salinan baru tidak disimpan. Riwayat lama tidak dihapus."
+                            else
+                                "Nonaktif: salinan baru disimpan ke riwayat clipboard.",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = clipboardPrivateMode,
+                        onCheckedChange = preferences::setClipboardPrivateMode,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = rgbTheme.primary,
+                            checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                        )
+                    )
                 }
             }
         }
@@ -1555,7 +1746,7 @@ private fun CustomizationTab(
                     Slider(
                         value = heightScale,
                         onValueChange = { preferences.setHeightScale(it) },
-                        valueRange = 0.75f..1.35f,
+                        valueRange = 1.0f..1.35f,
                         colors = SliderDefaults.colors(
                             thumbColor = rgbTheme.primary,
                             activeTrackColor = rgbTheme.primary,
@@ -1706,6 +1897,7 @@ private fun CustomizationTab(
 private fun ClipboardTab(
     items: List<dev.andikune.keyboardio.model.ClipboardItem>,
     rgbTheme: RgbThemeStyle,
+    isPrivateMode: Boolean,
     onTogglePin: (Long) -> Unit,
     onDeleteItem: (Long) -> Unit,
     onClearAll: () -> Unit
@@ -1728,7 +1920,10 @@ private fun ClipboardTab(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Teks yang disalin otomatis tersimpan untuk ditempel cepat.",
+                    text = if (isPrivateMode)
+                        "Mode privat aktif: salinan baru tidak direkam. Riwayat lama tetap tersimpan."
+                    else
+                        "Teks yang disalin otomatis tersimpan untuk ditempel cepat.",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )

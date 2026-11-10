@@ -32,7 +32,8 @@ enum class ActivePanel {
     NICKNAME_FONT,
     VOICE_INPUT,
     SOUND_SETTINGS,
-    TYPING_ACTIVITY
+    TYPING_ACTIVITY,
+    CALCULATOR
 }
 
 enum class SoundEffectType(val id: String, val displayName: String) {
@@ -62,7 +63,9 @@ enum class EnterActionType(val displayLabel: String) {
 data class KeyboardEditorState(
     val isPassword: Boolean = false,
     val isNumberOnly: Boolean = false,
-    val enterAction: EnterActionType = EnterActionType.RETURN
+    val isAutoCorrectionAllowed: Boolean = true,
+    val enterAction: EnterActionType = EnterActionType.RETURN,
+    val isSuggestionsAllowed: Boolean = true
 )
 
 enum class RgbThemeStyle(

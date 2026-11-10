@@ -1,6 +1,7 @@
 package dev.andikune.keyboardio.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,11 +31,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.andikune.keyboardio.data.TypingActivityStats
@@ -100,7 +104,7 @@ fun TypingActivityPanel(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (stats.totalCharacters > 0) {
+                if (stats.sessions.isNotEmpty()) {
                     IconButton(
                         onClick = onClearHistory,
                         modifier = Modifier.size(28.dp)
@@ -230,46 +234,60 @@ private fun SessionRow(
     session: TypingSessionRecord,
     rgbTheme: RgbThemeStyle
 ) {
-    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-    val timeStr = remember(session.timestamp) { timeFormat.format(Date(session.timestamp)) }
-    val durationSec = (session.durationMs / 1000L).coerceAtLeast(1L)
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val startTime = remember(session.startedAt) { timeFormat.format(Date(session.startedAt)) }
+    val endTime = remember(session.endedAt) { timeFormat.format(Date(session.endedAt)) }
+    val durationSec = (session.durationMs / 1000L).coerceAtLeast(0L)
+    var expanded by remember(session.id) { androidx.compose.runtime.mutableStateOf(false) }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(CyberCard)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(rgbTheme.secondary)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(rgbTheme.secondary)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Buka $startTime • Tutup $endTime",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
             Text(
-                text = "$timeStr",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "${session.charCount} karakter",
+                text = "${session.charCount} karakter • ${session.wordCount} kata • ${durationSec}s",
                 color = TextPrimary,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold
             )
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = session.text.ifBlank { "(Tidak ada teks yang diketik)" },
+            color = TextSecondary,
+            fontSize = 10.sp,
+            maxLines = if (expanded) Int.MAX_VALUE else 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (session.text.isNotBlank()) {
             Text(
-                text = " • ${session.wordCount} kata (${durationSec}s)",
-                color = TextTertiary,
-                fontSize = 10.sp
+                text = if (expanded) "Ketuk untuk ringkas" else "Ketuk untuk lihat seluruh teks",
+                color = rgbTheme.primary,
+                fontSize = 9.sp
             )
         }
     }

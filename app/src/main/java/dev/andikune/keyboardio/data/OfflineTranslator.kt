@@ -277,33 +277,42 @@ object OfflineTranslator {
     )
 
     fun translate(text: String, isIdToEn: Boolean): String {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) return ""
+        if (text.isBlank()) return text
 
-        var working = trimmed.lowercase(Locale.ROOT)
-
-        // 1. Check phrase matches first (longest match prioritized)
-        val phrases = if (isIdToEn) PHRASES_ID_TO_EN else PHRASES_EN_TO_ID
-        for ((source, target) in phrases) {
-            if (working == source) {
-                return preserveCase(trimmed, target)
-            }
-            if (working.contains(source)) {
-                working = working.replace(source, target)
-            }
+        val phrases = (if (isIdToEn) PHRASES_ID_TO_EN else PHRASES_EN_TO_ID)
+            .sortedByDescending { it.first.length }
+        val phrasePattern = Regex("(?<![\\p{L}\\p{N}])(?:${phrases.joinToString("|") { Regex.escape(it.first) }})(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
+        var result = phrasePattern.replace(text) { match ->
+            val pair = phrases.firstOrNull { it.first.equals(match.value, ignoreCase = true) }
+            pair?.let { preserveTokenCase(match.value, it.second) } ?: match.value
         }
 
-        // 2. Tokenize by words and punctuation delimiters
         val dict = if (isIdToEn) VOCAB_ID_TO_EN else VOCAB_EN_TO_ID
-        val tokens = working.split(Regex("(?<=\\b)|(?=\\b)"))
-        val translatedTokens = tokens.map { token ->
-            val clean = token.lowercase(Locale.ROOT)
-            dict[clean] ?: token
+        val wordPattern = Regex("[\\p{L}\\p{N}]+(?:['’][\\p{L}\\p{N}]+)*")
+        result = wordPattern.replace(result) { match ->
+            val translated = dict[match.value.lowercase(Locale.ROOT)]
+            if (translated == null) match.value else preserveTokenCase(match.value, translated)
         }
-
-        val result = translatedTokens.joinToString("")
-        return preserveCase(trimmed, result)
+        return result
     }
+
+    private fun preserveTokenCase(original: String, translated: String): String {
+        if (original.isEmpty() || translated.isEmpty()) return translated
+        return when {
+            original.all { !it.isLetter() || it.isUpperCase() } -> translated.uppercase(Locale.ROOT)
+            original.firstOrNull { it.isLetter() }?.isUpperCase() == true ->
+                translated.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+            else -> translated
+        }
+    }
+
+    /**
+     * True only when the offline dictionary changed the source beyond casing.
+     * Prevents the keyboard from presenting untranslated input as a translation.
+     */
+    fun hasMeaningfulTranslation(source: String, translated: String): Boolean =
+        source.isNotBlank() && translated.isNotBlank() &&
+            !source.trim().equals(translated.trim(), ignoreCase = true)
 
     fun translateIdToEn(text: String): String = translate(text, true)
     fun translateEnToId(text: String): String = translate(text, false)

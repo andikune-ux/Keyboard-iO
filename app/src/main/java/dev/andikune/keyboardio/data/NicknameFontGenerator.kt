@@ -9,30 +9,78 @@ data class NicknameStyle(
 
 object NicknameFontGenerator {
 
-    private fun mapChars(input: String, mapUpper: String, mapLower: String, mapDigits: String? = null): String {
-        return buildString {
+    private fun mappedCodePoint(mapping: String, index: Int): String? {
+        val count = mapping.codePointCount(0, mapping.length)
+        if (index !in 0 until count) return null
+        val offset = mapping.offsetByCodePoints(0, index)
+        return String(Character.toChars(mapping.codePointAt(offset)))
+    }
+
+    private fun mapChars(input: String, mapUpper: String, mapLower: String, mapDigits: String? = null): String =
+        buildString {
             for (ch in input) {
-                when {
-                    ch in 'A'..'Z' -> {
-                        val idx = ch - 'A'
-                        // Code points might be surrogate pairs
-                        val codePoint = mapUpper.codePointAt(mapUpper.offsetByCodePoints(0, idx))
-                        append(String(Character.toChars(codePoint)))
-                    }
-                    ch in 'a'..'z' -> {
-                        val idx = ch - 'a'
-                        val codePoint = mapLower.codePointAt(mapLower.offsetByCodePoints(0, idx))
-                        append(String(Character.toChars(codePoint)))
-                    }
-                    ch in '0'..'9' && mapDigits != null -> {
-                        val idx = ch - '0'
-                        val codePoint = mapDigits.codePointAt(mapDigits.offsetByCodePoints(0, idx))
-                        append(String(Character.toChars(codePoint)))
-                    }
-                    else -> append(ch)
+                val mapped = when {
+                    ch in 'A'..'Z' -> mappedCodePoint(mapUpper, ch - 'A')
+                    ch in 'a'..'z' -> mappedCodePoint(mapLower, ch - 'a')
+                    ch in '0'..'9' && mapDigits != null -> mappedCodePoint(mapDigits, ch - '0')
+                    else -> null
                 }
+                append(mapped ?: ch.toString())
             }
         }
+
+    private fun mapAvailableCharacters(input: String, mapping: Map<Char, String>): String =
+        buildString {
+            for (ch in input) append(mapping[ch] ?: ch.toString())
+        }
+
+    /**
+     * Reverse visible text units without separating combining marks, variation selectors,
+     * emoji modifiers, ZWJ sequences, or regional-indicator flag pairs.
+     */
+    private fun reverseGraphemeSafe(input: String): String {
+        if (input.isEmpty()) return input
+        val clusters = mutableListOf<String>()
+        val current = StringBuilder()
+        var previousWasJoiner = false
+        var regionalIndicatorsInCluster = 0
+
+        var offset = 0
+        while (offset < input.length) {
+            val codePoint = input.codePointAt(offset)
+            val type = Character.getType(codePoint)
+            val isMark = type == Character.NON_SPACING_MARK.toInt() ||
+                type == Character.COMBINING_SPACING_MARK.toInt() ||
+                type == Character.ENCLOSING_MARK.toInt()
+            val isVariationSelector = codePoint in 0xFE00..0xFE0F ||
+                codePoint in 0xE0100..0xE01EF
+            val isEmojiModifier = codePoint in 0x1F3FB..0x1F3FF
+            val isTagCharacter = codePoint in 0xE0020..0xE007F
+            val isRegionalIndicator = codePoint in 0x1F1E6..0x1F1FF
+            val joinsCurrent = current.isNotEmpty() && (
+                isMark || isVariationSelector || isEmojiModifier || isTagCharacter ||
+                    codePoint == 0x200D || previousWasJoiner ||
+                    (isRegionalIndicator && regionalIndicatorsInCluster % 2 == 1)
+                )
+
+            if (!joinsCurrent && current.isNotEmpty()) {
+                clusters += current.toString()
+                current.setLength(0)
+                regionalIndicatorsInCluster = 0
+            }
+
+            current.appendCodePoint(codePoint)
+            if (isRegionalIndicator) regionalIndicatorsInCluster++ else if (codePoint != 0x200D &&
+                !isMark && !isVariationSelector && !isEmojiModifier && !isTagCharacter
+            ) {
+                regionalIndicatorsInCluster = 0
+            }
+            previousWasJoiner = codePoint == 0x200D
+            offset += Character.charCount(codePoint)
+        }
+
+        if (current.isNotEmpty()) clusters += current.toString()
+        return clusters.asReversed().joinToString(separator = "")
     }
 
     val STYLES = listOf(
@@ -44,7 +92,7 @@ object NicknameFontGenerator {
                 mapChars(
                     text,
                     "𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ",
-                    "𝔞𝔟𝔠𝔡𝔢int𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷".replace("int", "𝔣")
+                    "𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷"
                 )
             }
         ),
@@ -143,6 +191,189 @@ object NicknameFontGenerator {
             }
         ),
         NicknameStyle(
+            id = "double_struck",
+            name = "Double-Struck",
+            previewSample = "𝕂𝕖𝕪𝕓𝕠𝕒𝕣𝕕 𝕚𝕆",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ",
+                    "𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫",
+                    "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "bold_serif",
+            name = "Bold Serif",
+            previewSample = "𝐊𝐞𝐲𝐛𝐨𝐚𝐫𝐝 𝐢𝐎",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙",
+                    "𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳",
+                    "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "italic_serif",
+            name = "Italic Serif",
+            previewSample = "𝐾𝑒𝑦𝑏𝑜𝑎𝑟𝑑 𝑖𝑂",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝐴𝐵𝐶𝐷𝐸𝐹𝐺𝐻𝐼𝐽𝐾𝐿𝑀𝑁𝑂𝑃𝑄𝑅𝑆𝑇𝑈𝑉𝑊𝑋𝑌𝑍",
+                    "𝑎𝑏𝑐𝑑𝑒𝑓𝑔ℎ𝑖𝑗𝑘𝑙𝑚𝑛𝑜𝑝𝑞𝑟𝑠𝑡𝑢𝑣𝑤𝑥𝑦𝑧"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "bold_italic_serif",
+            name = "Bold Italic Serif",
+            previewSample = "𝑲𝒆𝒚𝒃𝒐𝒂𝒓𝒅 𝒊𝑶",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝑨𝑩𝑪𝑫𝑬𝑭𝑮𝑯𝑰𝑱𝑲𝑳𝑴𝑵𝑶𝑷𝑸𝑹𝑺𝑻𝑼𝑽𝑾𝑿𝒀𝒁",
+                    "𝒂𝒃𝒄𝒅𝒆𝒇𝒈𝒉𝒊𝒋𝒌𝒍𝒎𝒏𝒐𝒑𝒒𝒓𝒔𝒕𝒖𝒗𝒘𝒙𝒚𝒛"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "sans_serif",
+            name = "Sans-Serif",
+            previewSample = "𝖪𝖾𝗒𝖻𝗈𝖺𝗋𝖽 𝗂𝖮",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝖠𝖡𝖢𝖣𝖤𝖥𝖦𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹",
+                    "𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂𝗃𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓",
+                    "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "fraktur_bold",
+            name = "Fraktur Bold",
+            previewSample = "𝕶𝖊𝖞𝖇𝖔𝖆𝖗𝖉 𝖎𝕺",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "𝕬𝕭𝕮𝕯𝕰𝕱𝕲𝕳𝕴𝕵𝕶𝕷𝕸𝕹𝕺𝕻𝕼𝕽𝕾𝕿𝖀𝖁𝖂𝖃𝖄𝖅",
+                    "𝖆𝖇𝖈𝖉𝖊𝖋𝖌𝖍𝖎𝖏𝖐𝖑𝖒𝖓𝖔𝖕𝖖𝖗𝖘𝖙𝖚𝖛𝖜𝖝𝖞𝖟"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "fullwidth",
+            name = "Fullwidth",
+            previewSample = "Ｋｅｙｂｏａｒｄ ｉＯ",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ",
+                    "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
+                    "０１２３４５６７８９"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "squared",
+            name = "Squared Outline",
+            previewSample = "🄺🄴🅈🄱🄾🄰🅁🄳",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "🄰🄱🄲🄳🄴🄵🄶🄷🄸🄹🄺🄻🄼🄽🄾🄿🅀🅁🅂🅃🅄🅅🅆🅇🅈🅉",
+                    "🄰🄱🄲🄳🄴🄵🄶🄷🄸🄹🄺🄻🄼🄽🄾🄿🅀🅁🅂🅃🅄🅅🅆🅇🅈🅉"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "negative_squared",
+            name = "Negative Squared",
+            previewSample = "🅺🅴🆈🅱🅾🅰🆁🅳",
+            transform = { text ->
+                mapChars(
+                    text,
+                    "🅰🅱🅲🅳🅴🅵🅶🅷🅸🅹🅺🅻🅼🅽🅾🅿🆀🆁🆂🆃🆄🆅🆆🆇🆈🆉",
+                    "🅰🅱🅲🅳🅴🅵🅶🅷🅸🅹🅺🅻🅼🅽🅾🅿🆀🆁🆂🆃🆄🆅🆆🆇🆈🆉"
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "upside_down",
+            name = "Upside Down",
+            previewSample = "oᴉ pɹɐoqʎǝʞ",
+            transform = { text ->
+                reverseGraphemeSafe(
+                    mapChars(
+                        text,
+                        "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz",
+                        "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz"
+                    )
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "superscript",
+            name = "Superscript",
+            previewSample = "ᵏᵉʸᵇᵒᵃʳᵈ ⁱᴼ",
+            transform = { text ->
+                mapAvailableCharacters(
+                    text,
+                    mapOf(
+                        'a' to "ᵃ", 'b' to "ᵇ", 'c' to "ᶜ", 'd' to "ᵈ", 'e' to "ᵉ",
+                        'f' to "ᶠ", 'g' to "ᵍ", 'h' to "ʰ", 'i' to "ⁱ", 'j' to "ʲ",
+                        'k' to "ᵏ", 'l' to "ˡ", 'm' to "ᵐ", 'n' to "ⁿ", 'o' to "ᵒ",
+                        'p' to "ᵖ", 'r' to "ʳ", 's' to "ˢ", 't' to "ᵗ", 'u' to "ᵘ",
+                        'v' to "ᵛ", 'w' to "ʷ", 'x' to "ˣ", 'y' to "ʸ", 'z' to "ᶻ",
+                        '0' to "⁰", '1' to "¹", '2' to "²", '3' to "³", '4' to "⁴",
+                        '5' to "⁵", '6' to "⁶", '7' to "⁷", '8' to "⁸", '9' to "⁹"
+                    )
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "subscript",
+            name = "Subscript",
+            previewSample = "ₖₑᵧᵦₒₐᵣd",
+            transform = { text ->
+                mapAvailableCharacters(
+                    text,
+                    mapOf(
+                        'a' to "ₐ", 'e' to "ₑ", 'h' to "ₕ", 'i' to "ᵢ", 'j' to "ⱼ",
+                        'k' to "ₖ", 'l' to "ₗ", 'm' to "ₘ", 'n' to "ₙ", 'o' to "ₒ",
+                        'p' to "ₚ", 'r' to "ᵣ", 's' to "ₛ", 't' to "ₜ", 'u' to "ᵤ",
+                        'v' to "ᵥ", 'x' to "ₓ",
+                        '0' to "₀", '1' to "₁", '2' to "₂", '3' to "₃", '4' to "₄",
+                        '5' to "₅", '6' to "₆", '7' to "₇", '8' to "₈", '9' to "₉"
+                    )
+                )
+            }
+        ),
+        NicknameStyle(
+            id = "parenthesized",
+            name = "Parenthesized",
+            previewSample = "ⓚⓔⓨⓑⓞⓐⓡⓓ",
+            transform = { text ->
+                val alphabet = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ"
+                mapChars(text, alphabet, alphabet)
+            }
+        ),
+        NicknameStyle(
+            id = "regional_indicator",
+            name = "Regional Indicator",
+            previewSample = "🇰🇪🇾🇧🇴🇦🇷🇩",
+            transform = { text ->
+                val alphabet = buildString {
+                    for (index in 0 until 26) appendCodePoint(0x1F1E6 + index)
+                }
+                mapChars(text, alphabet, alphabet)
+            }
+        ),
+        NicknameStyle(
             id = "gamer_wing",
             name = "Sultan Game (Sayap)",
             previewSample = "꧁༺Keyboard iO༻꧂",
@@ -163,7 +394,7 @@ object NicknameFontGenerator {
     )
 
     fun convertText(text: String, styleId: String): String {
-        val style = STYLES.find { it.id == styleId } ?: STYLES.first()
+        val style = STYLES.find { it.id == styleId } ?: return text
         return style.transform(text)
     }
 }

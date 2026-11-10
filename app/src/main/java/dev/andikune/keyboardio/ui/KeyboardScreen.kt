@@ -23,19 +23,27 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +75,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,14 +90,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.data.SwipeKeyGeometry
 import dev.andikune.keyboardio.model.ActivePanel
 import dev.andikune.keyboardio.model.AuroraWave
 import dev.andikune.keyboardio.model.KeyAction
@@ -114,6 +126,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import dev.andikune.keyboardio.MainActivity
 import dev.andikune.keyboardio.data.TypingActivityStats
 import dev.andikune.keyboardio.data.TypingActivityStore
+import dev.andikune.keyboardio.data.TypingSessionRecord
 import java.io.File
 import dev.andikune.keyboardio.service.VoiceInputManager
 import dev.andikune.keyboardio.ui.theme.CyberBlack
@@ -126,6 +139,7 @@ import dev.andikune.keyboardio.ui.theme.NeonMagenta
 import dev.andikune.keyboardio.ui.theme.TextPrimary
 import dev.andikune.keyboardio.ui.theme.TextSecondary
 import dev.andikune.keyboardio.ui.theme.TextTertiary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
 
@@ -137,12 +151,14 @@ fun KeyboardScreen(
     composingWordFlow: StateFlow<String>,
     previousWordFlow: StateFlow<String>? = null,
     userWordHistoryFlow: StateFlow<Map<String, Int>>? = null,
+    userWordBigramsFlow: StateFlow<Map<String, Map<String, Int>>>? = null,
     typingActivityStore: TypingActivityStore? = null,
     voiceInputManager: VoiceInputManager? = null,
     audioFeedback: KeyboardAudioFeedback? = null,
     onKeyAction: (KeyAction) -> Unit,
     onSecondaryChar: (String) -> Unit,
     onPasteText: (String) -> Unit,
+    onSessionTextChanged: (oldText: String, newText: String) -> Unit,
     onUndo: () -> Unit,
     onSmartDeleteWord: () -> Unit,
     onSuggestionPicked: (String) -> Unit,
@@ -157,6 +173,7 @@ fun KeyboardScreen(
     val isAuroraEnabled by preferences.auroraWaveEffect.collectAsState()
     val isPopupEnabled by preferences.keyPopupEffect.collectAsState()
     val isSwipeTypingEnabled by preferences.swipeTyping.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
 
     // Custom background states
     val customBgType by preferences.customBgType.collectAsState()
@@ -165,16 +182,38 @@ fun KeyboardScreen(
     val customBgDim by preferences.customBgDim.collectAsState()
 
     val clipboardItems by clipboardRepo.items.collectAsState()
+    val typingSessions by (
+        typingActivityStore?.sessions?.collectAsState()
+            ?: remember { mutableStateOf(emptyList<TypingSessionRecord>()) }
+        )
+    val typingStats = remember(typingSessions) {
+        TypingActivityStats(
+            totalCharacters = typingSessions.sumOf { it.charCount },
+            totalWords = typingSessions.sumOf { it.wordCount },
+            totalSessions = typingSessions.size,
+            totalDurationMs = typingSessions.sumOf { it.durationMs },
+            sessions = typingSessions
+        )
+    }
+    LaunchedEffect(typingSessions, typingActivityStore) {
+        val nextExpiry = typingSessions.minOfOrNull { it.createdAt + 24 * 60 * 60 * 1000L }
+        if (nextExpiry != null) {
+            delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(0L))
+            typingActivityStore?.getStats()
+        }
+    }
     val editorState by editorStateFlow.collectAsState()
     val composingWord by composingWordFlow.collectAsState()
     val previousWord by (previousWordFlow?.collectAsState() ?: remember { mutableStateOf("") })
     val learnedWords by (userWordHistoryFlow?.collectAsState() ?: remember { mutableStateOf(emptyMap()) })
+    val learnedBigrams by (userWordBigramsFlow?.collectAsState() ?: remember { mutableStateOf(emptyMap()) })
 
     // Active voice recognition state if available
     val isVoiceListening by (voiceInputManager?.isListening?.collectAsState() ?: remember { mutableStateOf(false) })
     val liveSpokenText by (voiceInputManager?.liveSpokenText?.collectAsState() ?: remember { mutableStateOf("") })
     val rmsVolume by (voiceInputManager?.rmsVolume?.collectAsState() ?: remember { mutableFloatStateOf(0f) })
     val voiceErrorMessage by (voiceInputManager?.errorMessage?.collectAsState() ?: remember { mutableStateOf(null) })
+    val voiceInputLanguage by preferences.voiceInputLanguage.collectAsState()
 
     var isTranslateMode by remember { mutableStateOf(false) }
     var translateSourceText by remember { mutableStateOf("") }
@@ -191,13 +230,15 @@ fun KeyboardScreen(
         composingWord
     }
 
-    val suggestions = remember(currentWordForSuggestions, previousWord, learnedWords, editorState.isPassword, isTranslateMode) {
-        if (editorState.isPassword) {
+    val suggestions = remember(currentWordForSuggestions, previousWord, learnedWords, learnedBigrams, editorState.isPassword, isTranslateMode) {
+        if (editorState.isPassword || !editorState.isSuggestionsAllowed) {
             emptyList()
         } else if (currentWordForSuggestions.trim().isNotEmpty()) {
             WordSuggester.getWordCompletionsAndCorrections(currentWordForSuggestions, learnedWords = learnedWords)
+        } else if (previousWord.isNotBlank() && !editorState.isNumberOnly) {
+            WordSuggester.getNextWordPredictions(previousWord, learnedWords = learnedWords, learnedBigrams = learnedBigrams)
         } else {
-            WordSuggester.getNextWordPredictions(previousWord)
+            emptyList()
         }
     }
 
@@ -208,33 +249,41 @@ fun KeyboardScreen(
     val waveAnim = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
 
+    fun updateTranslateSource(newText: String) {
+        val previousText = translateSourceText
+        translateSourceText = newText
+        onSessionTextChanged(previousText, newText)
+    }
+
+    fun deleteLastCodePoints(text: String, count: Int): String {
+        if (count <= 0 || text.isEmpty()) return text
+        val safeCount = count.coerceAtMost(text.codePointCount(0, text.length))
+        val newEnd = text.offsetByCodePoints(text.length, -safeCount)
+        return text.substring(0, newEnd)
+    }
+
     val effectiveKeyAction: (KeyAction) -> Unit = { action ->
         if (isTranslateMode) {
             when (action) {
                 is KeyAction.CommitText -> {
-                    translateSourceText += action.text
+                    updateTranslateSource(translateSourceText + action.text)
                 }
                 is KeyAction.Space -> {
-                    translateSourceText += " "
+                    updateTranslateSource(translateSourceText + " ")
                 }
                 is KeyAction.Backspace -> {
-                    if (translateSourceText.isNotEmpty()) {
-                        translateSourceText = translateSourceText.dropLast(1)
-                    }
+                    updateTranslateSource(deleteLastCodePoints(translateSourceText, 1))
                 }
                 is KeyAction.SmartDeleteWord -> {
                     val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
-                    translateSourceText = if (count > 0 && count <= translateSourceText.length) {
-                        translateSourceText.dropLast(count)
-                    } else ""
+                    updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
                 }
                 is KeyAction.Enter -> {
-                    if (translateResultText.isNotEmpty()) {
+                    // Never silently paste the source text when the local dictionary
+                    // cannot translate it. The user must explicitly see a real result.
+                    if (OfflineTranslator.hasMeaningfulTranslation(translateSourceText, translateResultText)) {
                         onPasteText(translateResultText)
-                        translateSourceText = ""
-                    } else if (translateSourceText.isNotEmpty()) {
-                        onPasteText(translateSourceText)
-                        translateSourceText = ""
+                        updateTranslateSource("")
                     }
                 }
                 else -> onKeyAction(action)
@@ -246,7 +295,7 @@ fun KeyboardScreen(
 
     val effectiveSecondaryChar: (String) -> Unit = { char ->
         if (isTranslateMode) {
-            translateSourceText += char
+            updateTranslateSource(translateSourceText + char)
         } else {
             onSecondaryChar(char)
         }
@@ -255,9 +304,7 @@ fun KeyboardScreen(
     val effectiveSmartDelete: () -> Unit = {
         if (isTranslateMode) {
             val count = SmartDeleteEngine.calculateSmartDeleteCount(translateSourceText)
-            translateSourceText = if (count > 0 && count <= translateSourceText.length) {
-                translateSourceText.dropLast(count)
-            } else ""
+            updateTranslateSource(deleteLastCodePoints(translateSourceText, count))
         } else {
             onSmartDeleteWord()
         }
@@ -267,11 +314,12 @@ fun KeyboardScreen(
         val word = rawWord.trim('"', ' ')
         if (isTranslateMode) {
             val lastSpace = translateSourceText.lastIndexOf(' ')
-            translateSourceText = if (lastSpace >= 0) {
+            val updatedText = if (lastSpace >= 0) {
                 translateSourceText.substring(0, lastSpace + 1) + "$word "
             } else {
                 "$word "
             }
+            updateTranslateSource(updatedText)
         } else {
             onSuggestionPicked(word)
         }
@@ -287,8 +335,11 @@ fun KeyboardScreen(
     }
 
     val latestClipItem = clipboardItems.firstOrNull()
-    val clipboardSuggestion = remember(latestClipItem, dismissedClipId, userHasTypedInSession, composingWord, editorState.isPassword) {
-        if (!editorState.isPassword &&
+    val clipboardSuggestion = remember(
+        latestClipItem, dismissedClipId, userHasTypedInSession, composingWord,
+        editorState.isPassword, clipboardPrivateMode
+    ) {
+        if (!editorState.isPassword && !clipboardPrivateMode &&
             !userHasTypedInSession &&
             composingWord.isEmpty() &&
             latestClipItem != null &&
@@ -312,7 +363,7 @@ fun KeyboardScreen(
                 activeWave = null
             }
         }
-        handleKeyClick(key, layoutMode, effectiveKeyAction) { next -> layoutMode = next }
+        handleKeyClick(key, layoutMode, editorState.isNumberOnly, effectiveKeyAction) { next -> layoutMode = next }
     }
 
     // Swipe typing touch points
@@ -320,9 +371,7 @@ fun KeyboardScreen(
 
     // If input requires number only, switch layout automatically
     LaunchedEffect(editorState.isNumberOnly) {
-        if (editorState.isNumberOnly) {
-            layoutMode = KeyboardLayoutMode.NUMBERS_SYMBOLS
-        }
+        layoutMode = if (editorState.isNumberOnly) KeyboardLayoutMode.NUMBERS_SYMBOLS else KeyboardLayoutMode.QWERTY_LOWER
     }
 
     // Floating drag offset
@@ -355,7 +404,8 @@ fun KeyboardScreen(
         )
     }
 
-    val baseKeyHeight = 44.dp * heightScale
+    // Enforce the 48dp minimum vertical touch target, including legacy saved scales.
+    val baseKeyHeight = maxOf(48.dp, 48.dp * heightScale)
     val enterLabel = editorState.enterAction.displayLabel
     val spaceLabel = spacebarStyle.displayLabel
 
@@ -389,24 +439,36 @@ fun KeyboardScreen(
             if (bgFile.exists() && bgFile.canRead()) {
                 Box(modifier = Modifier.matchParentSize()) {
                     if (customBgType == "IMAGE") {
-                        val bitmap = remember(customBgPath) {
-                            runCatching {
-                                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                                BitmapFactory.decodeFile(customBgPath, opts)
-                                var sampleSize = 1
-                                while ((opts.outWidth / sampleSize) > 1280 || (opts.outHeight / sampleSize) > 720) {
-                                    sampleSize *= 2
-                                }
-                                val decodeOpts = BitmapFactory.Options().apply {
-                                    inSampleSize = sampleSize
-                                    inPreferredConfig = Bitmap.Config.RGB_565
-                                }
-                                BitmapFactory.decodeFile(customBgPath, decodeOpts)
-                            }.getOrNull()
+                        // Decode on IO so large gallery images never block keyboard composition.
+                        val bitmap by produceState<Bitmap?>(initialValue = null, customBgPath) {
+                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching {
+                                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeFile(customBgPath, opts)
+                                    if (opts.outWidth <= 0 || opts.outHeight <= 0) {
+                                        return@runCatching null
+                                    }
+                                    var sampleSize = 1
+                                    val largestDimension = maxOf(opts.outWidth, opts.outHeight)
+                                    while (largestDimension > 1280 * sampleSize) {
+                                        sampleSize *= 2
+                                    }
+                                    val decodeOpts = BitmapFactory.Options().apply {
+                                        inSampleSize = sampleSize
+                                        inPreferredConfig = Bitmap.Config.RGB_565
+                                    }
+                                    BitmapFactory.decodeFile(customBgPath, decodeOpts)
+                                }.getOrNull()
+                            }
                         }
-                        if (bitmap != null) {
+                        // Release decoded native bitmap memory when the wallpaper changes
+                        // or this keyboard composition leaves the screen.
+                        androidx.compose.runtime.DisposableEffect(bitmap) {
+                            onDispose { bitmap?.recycle() }
+                        }
+                        bitmap?.let { decodedBitmap ->
                             Image(
-                                bitmap = bitmap.asImageBitmap(),
+                                bitmap = decodedBitmap.asImageBitmap(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -506,18 +568,23 @@ fun KeyboardScreen(
                 },
                 onOpenVoiceInput = {
                     if (activePanel == ActivePanel.VOICE_INPUT) {
-                        voiceInputManager?.stopListening()
+                        voiceInputManager?.cancelListening()
                         activePanel = ActivePanel.NONE
                     } else {
                         activePanel = ActivePanel.VOICE_INPUT
-                        voiceInputManager?.startListening()
+                        voiceInputManager?.startListening(voiceInputLanguage)
                     }
                 },
                 onOpenEmoji = {
                     activePanel = if (activePanel == ActivePanel.EMOJI) ActivePanel.NONE else ActivePanel.EMOJI
                 },
                 onOpenTranslate = {
-                    isTranslateMode = !isTranslateMode
+                    if (isTranslateMode) {
+                        updateTranslateSource("")
+                        isTranslateMode = false
+                    } else {
+                        isTranslateMode = true
+                    }
                     if (activePanel == ActivePanel.TRANSLATE) activePanel = ActivePanel.NONE
                 },
                 onOpenNicknameFont = {
@@ -537,18 +604,20 @@ fun KeyboardScreen(
                     translatedText = translateResultText,
                     isIdToEn = isIdToEn,
                     onSwitchLanguage = { isIdToEn = !isIdToEn },
-                    onClearText = { translateSourceText = "" },
+                    onClearText = { updateTranslateSource("") },
                     onInsertTranslation = { text ->
-                        onPasteText(text)
-                        translateSourceText = ""
+                        if (OfflineTranslator.hasMeaningfulTranslation(translateSourceText, text)) {
+                            onPasteText(text)
+                            updateTranslateSource("")
+                        }
                     },
                     onPasteFromClipboard = {
                         val clip = clipboardItems.firstOrNull()?.text
-                        if (!clip.isNullOrBlank()) translateSourceText = clip
+                        if (!clip.isNullOrBlank()) updateTranslateSource(clip)
                     },
                     onClose = {
+                        updateTranslateSource("")
                         isTranslateMode = false
-                        translateSourceText = ""
                     }
                 )
             }
@@ -607,13 +676,23 @@ fun KeyboardScreen(
                             onTypingActivityClick = {
                                 activePanel = ActivePanel.TYPING_ACTIVITY
                             },
+                            onCalculatorClick = { activePanel = ActivePanel.CALCULATOR },
                             onCloseClick = { activePanel = ActivePanel.NONE }
                         )
                     }
+                    ActivePanel.CALCULATOR -> {
+                        QuickCalculatorPanel(
+                            rgbTheme = rgbTheme,
+                            onInsertResult = { result ->
+                                onPasteText(result)
+                                activePanel = ActivePanel.NONE
+                            },
+                            onClose = { activePanel = ActivePanel.NONE }
+                        )
+                    }
                     ActivePanel.TYPING_ACTIVITY -> {
-                        val stats = typingActivityStore?.getStats() ?: TypingActivityStats(0, 0, 0, 0L, emptyList())
                         TypingActivityPanel(
-                            stats = stats,
+                            stats = typingStats,
                             rgbTheme = rgbTheme,
                             onClearHistory = { typingActivityStore?.clearAll() },
                             onClose = { activePanel = ActivePanel.NONE }
@@ -633,6 +712,7 @@ fun KeyboardScreen(
                         ClipboardPanel(
                             items = clipboardItems,
                             rgbTheme = rgbTheme,
+                            isPrivateMode = clipboardPrivateMode,
                             onPasteText = { text ->
                                 onPasteText(text)
                                 activePanel = ActivePanel.NONE
@@ -671,13 +751,15 @@ fun KeyboardScreen(
                             liveSpokenText = liveSpokenText,
                             rmsVolume = rmsVolume,
                             errorMessage = voiceErrorMessage,
+                            selectedLanguage = voiceInputLanguage,
+                            onLanguageSelected = preferences::setVoiceInputLanguage,
                             rgbTheme = rgbTheme,
                             onStopListening = {
                                 voiceInputManager?.stopListening()
                                 activePanel = ActivePanel.NONE
                             },
                             onClose = {
-                                voiceInputManager?.stopListening()
+                                voiceInputManager?.cancelListening()
                                 activePanel = ActivePanel.NONE
                             }
                         )
@@ -719,7 +801,43 @@ fun KeyboardScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(horizontal = 2.dp)
-                        ) {
+                                .pointerInput(isSwipeTypingEnabled, layoutMode, baseKeyHeight, learnedWords, oneHandedMode, onSuggestionPicked) {
+                                    val keyboardWidth = size.width.toFloat()
+                                    val rowHeightPx = baseKeyHeight.toPx() + 6.dp.toPx()
+                                    val touchSlopPx = viewConfiguration.touchSlop
+                                    if (isSwipeTypingEnabled && layoutMode in setOf(KeyboardLayoutMode.QWERTY_LOWER, KeyboardLayoutMode.QWERTY_UPPER, KeyboardLayoutMode.CAPS_LOCK)) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                                            val pathLetters = StringBuilder()
+                                            var dragging = false
+                                            fun letterAt(position: Offset): Char? = SwipeKeyGeometry.letterAt(position.x, position.y, keyboardWidth, rowHeightPx)
+                                            fun collectKey(position: Offset) {
+                                                val letter = letterAt(position)
+                                                if (letter != null && pathLetters.lastOrNull() != letter) pathLetters.append(letter)
+                                                val trailOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
+                                                if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + trailOffset, position.y))
+                                            }
+                                            if (letterAt(down.position) != null) {
+                                                swipeTrail.clear()
+                                                collectKey(down.position)
+                                                try {
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(PointerEventPass.Final)
+                                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                        if (!change.pressed) {
+                                                            if (dragging && pathLetters.length >= 3) WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
+                                                            break
+                                                        }
+                                                        if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
+                                                        if (dragging) { collectKey(change.position); change.consume() }
+                                                    }
+                                                } finally {
+                                                    swipeTrail.clear()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }                        ) {
                             when (layoutMode) {
                                 KeyboardLayoutMode.QWERTY_LOWER,
                                 KeyboardLayoutMode.QWERTY_UPPER,
@@ -916,28 +1034,30 @@ fun KeyboardScreen(
 private fun handleKeyClick(
     keyItem: KeyItem,
     currentMode: KeyboardLayoutMode,
+    isNumberOnly: Boolean,
     onKeyAction: (KeyAction) -> Unit,
     setMode: (KeyboardLayoutMode) -> Unit
 ) {
-    when (val action = keyItem.action) {
-        is KeyAction.Shift -> {
-            when (currentMode) {
-                KeyboardLayoutMode.QWERTY_LOWER -> setMode(KeyboardLayoutMode.QWERTY_UPPER)
-                KeyboardLayoutMode.QWERTY_UPPER -> setMode(KeyboardLayoutMode.CAPS_LOCK)
-                KeyboardLayoutMode.CAPS_LOCK -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-                else -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-            }
+    val action = keyItem.action
+    val nextMode = KeyboardLayouts.nextMode(currentMode, action, isNumberOnly)
+    if (nextMode != null) {
+        setMode(nextMode)
+        return
+    }
+
+    // A numeric editor is locked to numeric/symbol layouts. Ignore stale or
+    // unexpected letter/shift actions instead of sending invalid characters.
+    if (isNumberOnly && (action is KeyAction.Shift || action is KeyAction.SwitchToLetters)) {
+        return
+    }
+
+    if (action is KeyAction.CommitText) {
+        onKeyAction(action)
+        if (currentMode == KeyboardLayoutMode.QWERTY_UPPER) {
+            setMode(KeyboardLayoutMode.QWERTY_LOWER)
         }
-        is KeyAction.SwitchToSymbols -> setMode(KeyboardLayoutMode.NUMBERS_SYMBOLS)
-        is KeyAction.SwitchToMoreSymbols -> setMode(KeyboardLayoutMode.MORE_SYMBOLS)
-        is KeyAction.SwitchToLetters -> setMode(KeyboardLayoutMode.QWERTY_LOWER)
-        is KeyAction.CommitText -> {
-            onKeyAction(action)
-            if (currentMode == KeyboardLayoutMode.QWERTY_UPPER) {
-                setMode(KeyboardLayoutMode.QWERTY_LOWER)
-            }
-        }
-        else -> onKeyAction(action)
+    } else {
+        onKeyAction(action)
     }
 }
 
@@ -969,24 +1089,33 @@ private fun TopHeaderBar(
     onQuickClipboard: () -> Unit,
     onUndo: () -> Unit
 ) {
-    Row(
+    // Overlay layout: suggestion center is anchored to the actual keyboard center,
+    // not to the leftover width between left and right control groups.
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(48.dp)
             .background(CyberDarkSurface)
             .border(0.5.dp, CyberBorder)
-            .padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 4.dp)
     ) {
-        // Group Left (tetap): [iO + Menu] -> [Mic STT] -> [Emoji]
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Text "iO" & Grid Menu
+        val leftControlsWidth = 144.dp // 3 controls, each retaining a 48dp touch target.
+        val rightControlsWidth = if (isToolsOpen) 216.dp else 48.dp
+        val centerAvailableWidth = (maxWidth - leftControlsWidth - rightControlsWidth - 8.dp)
+            .coerceAtLeast(0.dp)
+
+        // Left controls stay grouped at the left edge with compact visual icon spacing.
+        Row(
+            modifier = Modifier.align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onOpenGridMenu)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .padding(horizontal = 5.dp, vertical = 3.dp)
                     .testTag("grid_menu_button")
             ) {
@@ -994,7 +1123,7 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.Apps,
                     contentDescription = "Menu Fitur",
                     tint = rgbTheme.primary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(18.dp)
                 )
                 Text(
                     text = " iO",
@@ -1003,143 +1132,145 @@ private fun TopHeaderBar(
                     fontWeight = FontWeight.Bold
                 )
             }
-
-            // Speech-to-Text / Voice Input Button (Tepat di samping teks iO)
             IconButton(
                 onClick = onOpenVoiceInput,
-                modifier = Modifier.size(28.dp).testTag("speech_to_text_button")
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("speech_to_text_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Input Suara / Dikte",
                     tint = NeonCyan,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.offset(x = 5.dp).size(20.dp)
                 )
             }
-
-            // Main Emoji Icon (Samping tombol Speech-to-Text)
             IconButton(
                 onClick = onOpenEmoji,
-                modifier = Modifier.size(28.dp).testTag("main_emoji_button")
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("main_emoji_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.SentimentSatisfiedAlt,
                     contentDescription = "Ikon Emoji Utama",
                     tint = TextPrimary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.offset(x = (-5).dp).size(20.dp)
                 )
             }
         }
 
-        // Center Area: Password Guard OR Clipboard Suggestion Chip OR Word Suggestions Strip (Saran Pengetikan Cerdas)
-        if (isPassword) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(CyberCard)
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = NeonGreen,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = "Sandi (Aman)",
-                    color = NeonGreen,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        } else if (clipboardSuggestion != null) {
-            // Saran Tempel Hasil Salin (Gboard clipboard chip with one-time dismiss)
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(CyberCard)
-                        .border(0.8.dp, rgbTheme.primary, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                ) {
+        // Centered independently of both side groups; width is capped to prevent overlap.
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .widthIn(max = centerAvailableWidth)
+                .fillMaxWidth()
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                isPassword -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable { onPasteClipboardSuggestion(clipboardSuggestion) }
-                            .testTag("clipboard_suggestion_pill")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Tempel",
-                            tint = rgbTheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        val cleanDisplay = clipboardSuggestion.take(15).replace('\n', ' ')
-                        Text(
-                            text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
-                            color = TextPrimary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Abaikan saran tempel",
-                        tint = TextTertiary,
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .clickable { onDismissClipboardSuggestion() }
-                            .testTag("dismiss_clipboard_suggestion")
-                    )
-                }
-            }
-        } else if (suggestions.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                suggestions.take(3).forEach { word ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 2.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(CyberCard)
-                            .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                            .clickable { onSuggestionPicked(word) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = NeonGreen,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = word,
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Sandi (Aman)",
+                            color = NeonGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
+                clipboardSuggestion != null && !isToolsOpen -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(CyberCard)
+                            .border(0.8.dp, rgbTheme.primary, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { onPasteClipboardSuggestion(clipboardSuggestion) }
+                                .testTag("clipboard_suggestion_pill")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = "Tempel",
+                                tint = rgbTheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val cleanDisplay = clipboardSuggestion.take(15).replace('\n', ' ')
+                            Text(
+                                text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
+                                color = TextPrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Abaikan saran tempel",
+                            tint = TextTertiary,
+                            modifier = Modifier
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .clip(CircleShape)
+                                .clickable { onDismissClipboardSuggestion() }
+                                .testTag("dismiss_clipboard_suggestion")
+                        )
+                    }
+                }
+                suggestions.isNotEmpty() && !isToolsOpen -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        suggestions.take(3).forEach { word ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(CyberCard)
+                                    .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                    .clickable { onSuggestionPicked(word) }
+                                    .padding(horizontal = 7.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = word,
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
             }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
         }
 
-        // Group Right: Single Door Toggle Button ("Tombol Pintu Buka Tutup")
-        // Triggers showing / hiding secondary tools (Terjemahan, Font Unik, Clipboard, Kembali/Undo)
+        // Right controls are anchored independently to the right edge.
         Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .widthIn(max = 216.dp)
+                .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
         ) {
@@ -1149,12 +1280,12 @@ private fun TopHeaderBar(
                 exit = shrinkHorizontally() + fadeOut()
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onOpenTranslate,
-                        modifier = Modifier.size(27.dp).testTag("header_translate_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_translate_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Translate,
@@ -1165,7 +1296,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onOpenNicknameFont,
-                        modifier = Modifier.size(27.dp).testTag("header_nickname_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_nickname_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
@@ -1176,7 +1307,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onQuickClipboard,
-                        modifier = Modifier.size(27.dp).testTag("header_clipboard_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_clipboard_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentPaste,
@@ -1187,7 +1318,7 @@ private fun TopHeaderBar(
                     }
                     IconButton(
                         onClick = onUndo,
-                        modifier = Modifier.size(27.dp).testTag("header_undo_button")
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("header_undo_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Undo,
@@ -1198,12 +1329,10 @@ private fun TopHeaderBar(
                     }
                 }
             }
-
-            // Tombol Pintu Buka Tutup (Pemicu sembunyikan/tampilkan tombol peralatan sebelah kanan)
             IconButton(
                 onClick = onToggleTools,
                 modifier = Modifier
-                    .size(28.dp)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .testTag("tools_door_toggle_button")
             ) {
                 Icon(
@@ -1295,7 +1424,7 @@ private fun OneHandedSideBar(
     ) {
         IconButton(
             onClick = onExpand,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Fullscreen,
@@ -1306,7 +1435,7 @@ private fun OneHandedSideBar(
 
         IconButton(
             onClick = onSwitchSide,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Icon(
                 imageVector = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward,
@@ -1317,43 +1446,88 @@ private fun OneHandedSideBar(
     }
 }
 
+private class SafeVideoSurfaceListener(
+    private val videoPath: String
+) : TextureView.SurfaceTextureListener {
+    private var mediaPlayer: MediaPlayer? = null
+    private var videoSurface: Surface? = null
+
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        release()
+        try {
+            val outputSurface = Surface(surface)
+            videoSurface = outputSurface
+            val player = MediaPlayer()
+            mediaPlayer = player
+            player.setDataSource(videoPath)
+            player.setSurface(outputSurface)
+            player.isLooping = true
+            player.setVolume(0f, 0f)
+            // Match image ContentScale.Crop so videos keep their aspect ratio.
+            player.setVideoScalingMode(
+                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            )
+            player.setOnErrorListener { failedPlayer, _, _ ->
+                if (mediaPlayer === failedPlayer) mediaPlayer = null
+                runCatching { failedPlayer.release() }
+                true
+            }
+            player.setOnPreparedListener { preparedPlayer ->
+                if (mediaPlayer === preparedPlayer) {
+                    runCatching { preparedPlayer.start() }
+                        .onFailure {
+                            if (mediaPlayer === preparedPlayer) mediaPlayer = null
+                            runCatching { preparedPlayer.release() }
+                        }
+                } else {
+                    runCatching { preparedPlayer.release() }
+                }
+            }
+            player.prepareAsync()
+        } catch (_: Exception) {
+            release()
+        }
+    }
+
+    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
+
+    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        release()
+        return true
+    }
+
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
+    fun release() {
+        val player = mediaPlayer
+        mediaPlayer = null
+        if (player != null) {
+            runCatching { player.stop() }
+            runCatching { player.release() }
+        }
+        videoSurface?.let { runCatching { it.release() } }
+        videoSurface = null
+    }
+}
+
 @Composable
 private fun SafeVideoBackground(
     videoPath: String,
     opacity: Float,
     modifier: Modifier = Modifier
 ) {
-    AndroidView(
-        factory = { ctx ->
-            TextureView(ctx).apply {
-                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    var mediaPlayer: MediaPlayer? = null
-                    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                        runCatching {
-                            mediaPlayer = MediaPlayer().apply {
-                                setDataSource(videoPath)
-                                setSurface(Surface(surface))
-                                isLooping = true
-                                setVolume(0f, 0f) // Completely muted, 0% audio noise
-                                setOnErrorListener { _, _, _ -> true }
-                                prepareAsync()
-                                setOnPreparedListener { start() }
-                            }
-                        }
-                    }
-                    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
-                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                        runCatching {
-                            mediaPlayer?.stop()
-                            mediaPlayer?.release()
-                            mediaPlayer = null
-                        }
-                        return true
-                    }
-                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+    androidx.compose.runtime.key(videoPath) {
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    surfaceTextureListener = SafeVideoSurfaceListener(videoPath)
                 }
+            },
+            modifier = modifier.alpha(opacity),
+            onRelease = { view ->
+                (view.surfaceTextureListener as? SafeVideoSurfaceListener)?.release()
+                view.surfaceTextureListener = null
             }
-        },
-        modifier = modifier.alpha(opacity)
-    )
+        )
+    }
 }

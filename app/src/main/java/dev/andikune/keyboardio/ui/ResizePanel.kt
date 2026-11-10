@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -45,10 +47,10 @@ fun ResizePanel(
     modifier: Modifier = Modifier
 ) {
     val presets = listOf(
-        "Ringkas" to 0.85f,
         "Normal" to 1.0f,
-        "Tinggi" to 1.15f,
-        "Ekstra" to 1.30f
+        "Tinggi" to 1.1f,
+        "Ekstra" to 1.2f,
+        "Maksimal" to 1.35f
     )
 
     Column(
@@ -73,7 +75,7 @@ fun ResizePanel(
             Row {
                 IconButton(
                     onClick = { onScaleChanged(1.0f) },
-                    modifier = Modifier.testTag("reset_keyboard_height")
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("reset_keyboard_height")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -84,7 +86,7 @@ fun ResizePanel(
 
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.testTag("confirm_keyboard_height")
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("confirm_keyboard_height")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
@@ -110,7 +112,7 @@ fun ResizePanel(
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) rgbTheme.primary else CyberCard)
                         .clickable { onScaleChanged(scale) }
-                        .padding(vertical = 8.dp),
+                        .heightIn(min = 48.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -129,7 +131,7 @@ fun ResizePanel(
         Slider(
             value = currentScale,
             onValueChange = onScaleChanged,
-            valueRange = 0.75f..1.35f,
+            valueRange = 1.0f..1.35f,
             colors = SliderDefaults.colors(
                 thumbColor = rgbTheme.primary,
                 activeTrackColor = rgbTheme.primary,

@@ -247,19 +247,25 @@ object WordSuggester {
      * Predicts the 3 most likely next words given the completed preceding word.
      * Used when composingWord is empty (cursor is right after a space or start of text).
      */
-    fun getNextWordPredictions(previousWord: String, maxCount: Int = 3): List<String> {
+    fun getNextWordPredictions(
+        previousWord: String,
+        maxCount: Int = 3,
+        learnedWords: Map<String, Int> = emptyMap(),
+        learnedBigrams: Map<String, Map<String, Int>> = emptyMap()
+    ): List<String> {
         val cleanPrev = previousWord.trim().lowercase(Locale.ROOT)
-        if (cleanPrev.isEmpty()) {
-            // Default conversational openers when starting a sentence or field
-            return listOf("Saya", "Apa", "Halo").take(maxCount)
-        }
-
-        BIGRAM_PREDICTIONS[cleanPrev]?.let { predictions ->
-            return predictions.take(maxCount)
-        }
-
-        // Fallback: popular conversational follow-ups
-        return listOf("dan", "yang", "bisa").take(maxCount)
+        if (cleanPrev.isEmpty() || maxCount <= 0) return emptyList()
+        val personal = learnedBigrams[cleanPrev].orEmpty().entries
+            .sortedByDescending { it.value }
+            .map { it.key }
+        val contextual = BIGRAM_PREDICTIONS[cleanPrev].orEmpty()
+        return (personal + contextual)
+            .distinct()
+            .sortedByDescending { candidate ->
+                val token = candidate.substringBefore(' ').lowercase(Locale.ROOT)
+                (learnedBigrams[cleanPrev]?.get(token) ?: 0) * 1000 + (learnedWords[token] ?: 0)
+            }
+            .take(maxCount)
     }
 
     /**
@@ -277,74 +283,21 @@ object WordSuggester {
         learnedWords: Map<String, Int> = emptyMap()
     ): List<String> {
         val trimmed = composingWord.trim()
-        if (trimmed.isEmpty()) return emptyList()
-
+        if (trimmed.isEmpty() || maxCount <= 0) return emptyList()
         val lower = trimmed.lowercase(Locale.ROOT)
-        val isFirstCapital = trimmed[0].isUpperCase()
-        val isAllCaps = trimmed.all { it.isUpperCase() }
-
-        val pool: List<WordEntry> = if (learnedWords.isEmpty()) {
-            FREQUENT_WORDS
-        } else {
-            val learnedEntries = learnedWords.map { (w, count) ->
-                val base = FREQUENT_WORDS.find { it.word == w }?.frequency ?: 50
-                WordEntry(w, base + count * 100)
-            }
-            val learnedSet = learnedWords.keys
-            FREQUENT_WORDS.filterNot { learnedSet.contains(it.word) } + learnedEntries
-        }
-
-        // 1. Missing space detection (Saran spasi saat pengguna lupa spasi: e.g. "apakabar", "selamatpagi", "terimakasih")
-        val missingSpace = if (lower.length >= 5) findMissingSpaceSuggestion(trimmed, learnedWords) else null
-
-        // 2. Prefix completions (Search words that start with what user is typing)
-        val prefixMatches = pool
-            .filter { it.word.startsWith(lower) }
-            .sortedWith(
-                compareByDescending<WordEntry> { it.frequency }
-                    .thenBy { it.word.length }
-            )
-            .map { formatCase(it.word, isFirstCapital, isAllCaps) }
-
-        val suggestions = mutableListOf<String>()
-        if (missingSpace != null) {
-            if (!VALID_WORDS_SET.contains(lower) && !learnedWords.containsKey(lower)) {
-                suggestions.add(missingSpace)
-            }
-        }
-        suggestions.addAll(prefixMatches)
-        if (missingSpace != null && !suggestions.contains(missingSpace)) {
-            suggestions.add(1.coerceAtMost(suggestions.size), missingSpace)
-        }
-
-        if (suggestions.isNotEmpty()) {
-            return suggestions.distinct().take(maxCount)
-        }
-
-        // 3. Typo Detection & Fuzzy Correction via Spatial-Weighted Damerau-Levenshtein Distance
-        if (lower.length >= 3) {
-            val candidates = pool
-                .map { entry ->
-                    val dist = calculateSpatialEditDistance(lower, entry.word)
-                    // Score = frequency bonus - spatial distance penalty
-                    val score = (entry.frequency * 0.4) - (dist * 40.0)
-                    Triple(entry.word, dist, score)
-                }
-                .filter { it.second <= 1.4 } // Maximum reasonable typo distance
-                .sortedByDescending { it.third } // Highest score first
-                .map { formatCase(it.first, isFirstCapital, isAllCaps) }
-
-            val fuzzyResults = mutableListOf<String>()
-            if (missingSpace != null) fuzzyResults.add(missingSpace)
-            fuzzyResults.addAll(candidates)
-
-            if (fuzzyResults.isNotEmpty()) {
-                return fuzzyResults.distinct().take(maxCount)
-            }
-        }
-
-        // If no match found, keep raw word
-        return if (missingSpace != null) listOf(missingSpace, trimmed) else listOf(trimmed)
+        val firstCapital = trimmed.firstOrNull()?.isUpperCase() == true
+        val allCaps = trimmed.length > 1 && trimmed.all { it.isUpperCase() }
+        val learnedCandidates = learnedWords.entries
+            .filter { it.key.startsWith(lower) && it.key != lower }
+            .sortedByDescending { it.value }
+            .map { formatCase(it.key, firstCapital, allCaps) }
+        val dictionaryCandidates = FREQUENT_WORDS.asSequence()
+            .filter { it.word.startsWith(lower) && it.word != lower }
+            .sortedWith(compareByDescending<WordEntry> { it.frequency }.thenBy { it.word.length })
+            .map { formatCase(it.word, firstCapital, allCaps) }
+            .toList()
+        // Keep the user's exact spelling as the first choice; never surface fuzzy guesses as if verified.
+        return (listOf(trimmed) + learnedCandidates + dictionaryCandidates).distinct().take(maxCount)
     }
 
     /**
@@ -411,6 +364,34 @@ object WordSuggester {
     }
 
     /**
+     * Resolve a traced QWERTY path to a dictionary/learned word.
+     * A result is returned only when the geometric spelling is sufficiently close.
+     */
+    fun getSwipeSuggestion(path: String, learnedWords: Map<String, Int> = emptyMap()): String? {
+        val normalized = path.lowercase(Locale.ROOT).filter { it in 'a'..'z' }
+        if (normalized.length < 3 || normalized.length > 18) return null
+        val pool = (FREQUENT_WORDS + learnedWords.map { (word, count) ->
+            WordEntry(word.lowercase(Locale.ROOT), 100 + count.coerceAtMost(1000))
+        }).distinctBy { it.word.lowercase(Locale.ROOT) }
+        val ranked = pool.asSequence()
+            .filter { kotlin.math.abs(it.word.length - normalized.length) <= 3 }
+            .map { entry ->
+                val candidate = entry.word.lowercase(Locale.ROOT)
+                val normalizedDistance = calculateSpatialEditDistance(normalized, candidate) /
+                    maxOf(normalized.length, candidate.length).toDouble()
+                val learnedBoost = (learnedWords[candidate] ?: 0).coerceAtMost(500) / 10000.0
+                Triple(candidate, normalizedDistance - learnedBoost, normalizedDistance)
+            }
+            .filter { it.third <= 0.34 }
+            .sortedBy { it.second }
+            .toList()
+        val best = ranked.firstOrNull() ?: return null
+        val second = ranked.getOrNull(1)
+        if (second != null && second.second - best.second < 0.025 && best.third > 0.02) return null
+        return best.first
+    }
+
+    /**
      * Strict Auto-Correction logic executed when user taps Spacebar:
      * - NEVER autocorrect a word that is already valid or recognized (in dictionary or learned words).
      * - NEVER autocorrect words shorter than 3 characters.
@@ -422,39 +403,23 @@ object WordSuggester {
         learnedWords: Map<String, Int> = emptyMap()
     ): String? {
         val trimmed = word.trim()
-        if (trimmed.length < 3) return null
-
+        if (trimmed.length < 3 || trimmed.any { !it.isLetter() } || trimmed.first().isUpperCase()) return null
         val lower = trimmed.lowercase(Locale.ROOT)
-        // Rule 1: Never autocorrect a recognized word!
-        if (VALID_WORDS_SET.contains(lower) || learnedWords.containsKey(lower)) return null
-
-        val pool: List<WordEntry> = if (learnedWords.isEmpty()) {
-            FREQUENT_WORDS
-        } else {
-            val learnedEntries = learnedWords.map { (w, count) ->
-                val base = FREQUENT_WORDS.find { it.word == w }?.frequency ?: 50
-                WordEntry(w, base + count * 100)
-            }
-            val learnedSet = learnedWords.keys
-            FREQUENT_WORDS.filterNot { learnedSet.contains(it.word) } + learnedEntries
-        }
-
-        // Rule 2: Calculate spatial edit distance
-        val bestCandidate = pool
-            .map { entry ->
-                val dist = calculateSpatialEditDistance(lower, entry.word)
-                Triple(entry.word, dist, entry.frequency)
-            }
-            .filter { it.second <= 1.1 } // Very strict confidence threshold
-            .sortedWith(
-                compareBy<Triple<String, Double, Int>> { it.second } // Lowest distance first
-                    .thenByDescending { it.third } // Highest frequency tie-breaker
-            )
-            .firstOrNull()
-
-        return bestCandidate?.first?.let {
-            formatCase(it, trimmed[0].isUpperCase(), trimmed.all { ch -> ch.isUpperCase() })
-        }
+        val learned = learnedWords.keys.map { it.lowercase(Locale.ROOT) }.toSet()
+        if (lower in VALID_WORDS_SET || lower in learned) return null
+        val pool = (FREQUENT_WORDS + learnedWords.map { (w, count) ->
+            WordEntry(w.lowercase(Locale.ROOT), 100 + count.coerceAtMost(1000))
+        }).distinctBy { it.word.lowercase(Locale.ROOT) }
+        val ranked = pool.asSequence()
+            .filter { kotlin.math.abs(it.word.length - lower.length) <= 1 }
+            .map { entry -> Triple(entry.word.lowercase(Locale.ROOT), calculateSpatialEditDistance(lower, entry.word.lowercase(Locale.ROOT)), entry.frequency) }
+            .filter { it.second <= 0.85 }
+            .sortedWith(compareBy<Triple<String, Double, Int>> { it.second }.thenByDescending { it.third })
+            .toList()
+        val best = ranked.firstOrNull() ?: return null
+        val second = ranked.getOrNull(1)
+        if (second != null && second.second - best.second < 0.25) return null
+        return formatCase(best.first, trimmed.first().isUpperCase(), trimmed.length > 1 && trimmed.all { it.isUpperCase() })
     }
 
     /**

@@ -56,6 +56,8 @@ fun VoiceInputOverlay(
     liveSpokenText: String,
     rmsVolume: Float,
     errorMessage: String?,
+    selectedLanguage: String,
+    onLanguageSelected: (String) -> Unit,
     rgbTheme: RgbThemeStyle,
     onStopListening: () -> Unit,
     onClose: () -> Unit,
@@ -75,7 +77,7 @@ fun VoiceInputOverlay(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(280.dp)
+            .height(330.dp)
             .background(CyberDarkSurface)
             .padding(16.dp)
             .testTag("voice_input_overlay"),
@@ -100,6 +102,26 @@ fun VoiceInputOverlay(
                     contentDescription = "Tutup",
                     tint = TextSecondary
                 )
+            }
+        }
+
+        // Recognition language is explicit and persisted across keyboard sessions.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("SYSTEM" to "Otomatis", "id-ID" to "Indonesia", "en-US" to "English").forEach { (tag, label) ->
+                Button(
+                    onClick = { onLanguageSelected(tag) },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedLanguage == tag) rgbTheme.primary else CyberCard,
+                        contentColor = if (selectedLanguage == tag) CyberBlack else TextPrimary
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                ) {
+                    Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
 

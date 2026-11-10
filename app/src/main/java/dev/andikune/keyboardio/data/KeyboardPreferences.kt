@@ -14,6 +14,33 @@ class KeyboardPreferences(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("keyboard_io_prefs", Context.MODE_PRIVATE)
 
+    init {
+        val settingsVersion = prefs.getInt("custom_bg_settings_version", 0)
+        val editor = prefs.edit()
+        if (settingsVersion < 2) {
+            if (prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f) {
+                editor.putFloat("custom_bg_opacity", 0.92f)
+            }
+            if (prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f) {
+                editor.putFloat("custom_bg_dim", 0.10f)
+            }
+        }
+        if (settingsVersion < 3) {
+            // Only migrate the legacy defaults when their origin is unambiguous.
+            // Version 2 may contain a user's intentional 0.92 / 0.10 customization,
+            // so preserve that pair rather than silently overwriting user settings.
+            val hasKnownLegacyDefaults =
+                settingsVersion < 2 &&
+                    prefs.getFloat("custom_bg_opacity", 0.45f) == 0.45f &&
+                    prefs.getFloat("custom_bg_dim", 0.5f) == 0.5f
+            if (hasKnownLegacyDefaults) {
+                editor.putFloat("custom_bg_opacity", 1f)
+                editor.putFloat("custom_bg_dim", 0f)
+            }
+        }
+        editor.putInt("custom_bg_settings_version", 3).apply()
+    }
+
     private val _theme = MutableStateFlow(loadTheme())
     val theme: StateFlow<RgbThemeStyle> = _theme.asStateFlow()
 
@@ -47,6 +74,9 @@ class KeyboardPreferences(context: Context) {
     private val _spacebarStyle = MutableStateFlow(loadSpacebarStyle())
     val spacebarStyle: StateFlow<SpacebarStyle> = _spacebarStyle.asStateFlow()
 
+    private val _voiceInputLanguage = MutableStateFlow(loadVoiceInputLanguage())
+    val voiceInputLanguage: StateFlow<String> = _voiceInputLanguage.asStateFlow()
+
     private val _autoCorrection = MutableStateFlow(loadAutoCorrection())
     val autoCorrection: StateFlow<Boolean> = _autoCorrection.asStateFlow()
 
@@ -59,6 +89,9 @@ class KeyboardPreferences(context: Context) {
     private val _keyPopupEffect = MutableStateFlow(loadKeyPopup())
     val keyPopupEffect: StateFlow<Boolean> = _keyPopupEffect.asStateFlow()
 
+    private val _clipboardPrivateMode = MutableStateFlow(loadClipboardPrivateMode())
+    val clipboardPrivateMode: StateFlow<Boolean> = _clipboardPrivateMode.asStateFlow()
+
     fun setTheme(theme: RgbThemeStyle) {
         prefs.edit().putString("rgb_theme", theme.id).apply()
         _theme.value = theme
@@ -70,12 +103,12 @@ class KeyboardPreferences(context: Context) {
     }
 
     fun setHeightScale(scale: Float) {
-        val clamped = scale.coerceIn(0.75f, 1.35f)
+        val clamped = scale.coerceIn(1.0f, 1.35f)
         prefs.edit().putFloat("height_scale", clamped).apply()
         _heightScale.value = clamped
     }
 
-    private fun loadHeightScale(): Float = prefs.getFloat("height_scale", 1.0f)
+    private fun loadHeightScale(): Float = prefs.getFloat("height_scale", 1.0f).coerceIn(1.0f, 1.35f)
 
     fun setOneHandedMode(mode: OneHandedMode) {
         prefs.edit().putString("one_handed_mode", mode.name).apply()
@@ -154,12 +187,30 @@ class KeyboardPreferences(context: Context) {
         return SpacebarStyle.entries.find { it.id == raw } ?: SpacebarStyle.DEFAULT
     }
 
+    fun setVoiceInputLanguage(languageTag: String) {
+        val normalized = when (languageTag) {
+            "id-ID", "en-US", "SYSTEM" -> languageTag
+            else -> "SYSTEM"
+        }
+        prefs.edit().putString("voice_input_language", normalized).apply()
+        _voiceInputLanguage.value = normalized
+    }
+
+    private fun loadVoiceInputLanguage(): String = when (prefs.getString("voice_input_language", "SYSTEM")) {
+        "id-ID" -> "id-ID"
+        "en-US" -> "en-US"
+        else -> "SYSTEM"
+    }
+
     fun setAutoCorrection(enabled: Boolean) {
         prefs.edit().putBoolean("auto_correction", enabled).apply()
         _autoCorrection.value = enabled
     }
 
     private fun loadAutoCorrection(): Boolean = prefs.getBoolean("auto_correction", true)
+
+    /** Read persisted value directly so an IME instance observes changes made in Settings. */
+    fun isAutoCorrectionEnabled(): Boolean = prefs.getBoolean("auto_correction", true)
 
     fun setSwipeTyping(enabled: Boolean) {
         prefs.edit().putBoolean("swipe_typing", enabled).apply()
@@ -182,6 +233,18 @@ class KeyboardPreferences(context: Context) {
 
     private fun loadKeyPopup(): Boolean = prefs.getBoolean("key_popup", true)
 
+    fun setClipboardPrivateMode(enabled: Boolean) {
+        prefs.edit().putBoolean("clipboard_private_mode", enabled).apply()
+        _clipboardPrivateMode.value = enabled
+    }
+
+    private fun loadClipboardPrivateMode(): Boolean =
+        prefs.getBoolean("clipboard_private_mode", false)
+
+    /** Read the persisted value directly so an active IME observes Settings changes. */
+    fun isClipboardPrivateModeEnabled(): Boolean =
+        prefs.getBoolean("clipboard_private_mode", false)
+
     // Custom Background Settings (Photo / Video from Gallery)
     private val _customBgType = MutableStateFlow(loadCustomBgType())
     val customBgType: StateFlow<String> = _customBgType.asStateFlow() // "NONE", "IMAGE", "VIDEO"
@@ -195,28 +258,49 @@ class KeyboardPreferences(context: Context) {
     private val _customBgDim = MutableStateFlow(loadCustomBgDim())
     val customBgDim: StateFlow<Float> = _customBgDim.asStateFlow()
 
-    fun setCustomBackground(type: String, path: String, opacity: Float = 0.45f, dim: Float = 0.5f) {
+    // Keep separate settings-screen and IME instances synchronized through SharedPreferences.
+    private val wallpaperPreferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+            when (key) {
+                "custom_bg_type" -> _customBgType.value =
+                    sharedPreferences.getString(key, "NONE") ?: "NONE"
+                "custom_bg_path" -> _customBgPath.value =
+                    sharedPreferences.getString(key, "") ?: ""
+                "custom_bg_opacity" -> _customBgOpacity.value =
+                    sharedPreferences.getFloat(key, 1f).coerceIn(0f, 1f)
+                "custom_bg_dim" -> _customBgDim.value =
+                    sharedPreferences.getFloat(key, 0f).coerceIn(0f, 0.75f)
+                "clipboard_private_mode" -> _clipboardPrivateMode.value =
+                    sharedPreferences.getBoolean(key, false)
+            }
+        }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(wallpaperPreferenceListener)
+    }
+
+    fun setCustomBackground(type: String, path: String, opacity: Float = 1f, dim: Float = 0f) {
         prefs.edit()
             .putString("custom_bg_type", type)
             .putString("custom_bg_path", path)
-            .putFloat("custom_bg_opacity", opacity.coerceIn(0.1f, 1f))
-            .putFloat("custom_bg_dim", dim.coerceIn(0f, 0.9f))
+            .putFloat("custom_bg_opacity", opacity.coerceIn(0f, 1f))
+            .putFloat("custom_bg_dim", dim.coerceIn(0f, 0.75f))
             .apply()
         _customBgType.value = type
         _customBgPath.value = path
-        _customBgOpacity.value = opacity.coerceIn(0.1f, 1f)
-        _customBgDim.value = dim.coerceIn(0f, 0.9f)
+        _customBgOpacity.value = opacity.coerceIn(0f, 1f)
+        _customBgDim.value = dim.coerceIn(0f, 0.75f)
     }
 
     fun setCustomBgOpacity(opacity: Float) {
-        val clamped = opacity.coerceIn(0.1f, 1f)
+        val clamped = opacity.coerceIn(0f, 1f)
         prefs.edit().putFloat("custom_bg_opacity", clamped).apply()
         _customBgOpacity.value = clamped
     }
 
     fun setCustomBgDim(dim: Float) {
-        val clamped = dim.coerceIn(0f, 0.9f)
-        prefs.edit().putFloat("custom_bg_dim", dim).apply()
+        val clamped = dim.coerceIn(0f, 0.75f)
+        prefs.edit().putFloat("custom_bg_dim", clamped).apply()
         _customBgDim.value = clamped
     }
 
@@ -231,6 +315,6 @@ class KeyboardPreferences(context: Context) {
 
     private fun loadCustomBgType(): String = prefs.getString("custom_bg_type", "NONE") ?: "NONE"
     private fun loadCustomBgPath(): String = prefs.getString("custom_bg_path", "") ?: ""
-    private fun loadCustomBgOpacity(): Float = prefs.getFloat("custom_bg_opacity", 0.45f)
-    private fun loadCustomBgDim(): Float = prefs.getFloat("custom_bg_dim", 0.5f)
+    private fun loadCustomBgOpacity(): Float = prefs.getFloat("custom_bg_opacity", 1f).coerceIn(0f, 1f)
+    private fun loadCustomBgDim(): Float = prefs.getFloat("custom_bg_dim", 0f).coerceIn(0f, 0.75f)
 }

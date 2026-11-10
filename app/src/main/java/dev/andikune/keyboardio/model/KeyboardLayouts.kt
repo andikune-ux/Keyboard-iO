@@ -309,4 +309,28 @@ object KeyboardLayouts {
             )
         )
     }
+
+    /**
+     * Resolve layout-only actions against the active editor. Numeric editors
+     * must never transition into a letter layout, even if an ABC key is tapped.
+     */
+    fun nextMode(
+        currentMode: KeyboardLayoutMode,
+        action: KeyAction,
+        isNumberOnly: Boolean
+    ): KeyboardLayoutMode? {
+        return when (action) {
+            is KeyAction.Shift -> if (isNumberOnly) null else when (currentMode) {
+                KeyboardLayoutMode.QWERTY_LOWER -> KeyboardLayoutMode.QWERTY_UPPER
+                KeyboardLayoutMode.QWERTY_UPPER -> KeyboardLayoutMode.CAPS_LOCK
+                KeyboardLayoutMode.CAPS_LOCK -> KeyboardLayoutMode.QWERTY_LOWER
+                else -> KeyboardLayoutMode.QWERTY_LOWER
+            }
+            is KeyAction.SwitchToSymbols -> KeyboardLayoutMode.NUMBERS_SYMBOLS
+            is KeyAction.SwitchToMoreSymbols -> KeyboardLayoutMode.MORE_SYMBOLS
+            is KeyAction.SwitchToLetters -> if (isNumberOnly) null else KeyboardLayoutMode.QWERTY_LOWER
+            else -> null
+        }
+    }
+
 }

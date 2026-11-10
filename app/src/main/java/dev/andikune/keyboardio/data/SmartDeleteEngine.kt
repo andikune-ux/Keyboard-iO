@@ -1,82 +1,37 @@
 package dev.andikune.keyboardio.data
 
 /**
- * Smart delete engine providing context-aware deletion for Keyboard iO.
- * Intelligently recognizes sentence boundaries (.!?), newlines (\n),
- * clause/punctuation boundaries (,, ;), and words.
+ * Context-aware deletion using Unicode code points, not UTF-16 code units.
+ * Stops at line, sentence, clause, punctuation, or word boundaries.
  */
 object SmartDeleteEngine {
-
-    /**
-     * Calculates the number of characters before the cursor to delete.
-     * Stops at:
-     * - Newlines (\n)
-     * - Sentence boundaries (.!? followed by space or at boundary)
-     * - Clause boundaries (,, ;, :)
-     * - Punctuation marks themselves
-     * - Word boundaries (if no punctuation or newline is present)
-     */
     fun calculateSmartDeleteCount(textBefore: String): Int {
         if (textBefore.isEmpty()) return 0
-        val len = textBefore.length
+        val points = textBefore.codePoints().toArray()
+        val length = points.size
+        var index = length - 1
 
-        var i = len - 1
-        // Skip trailing spaces (excluding newlines)
-        while (i >= 0 && textBefore[i] == ' ') {
-            i--
-        }
-        if (i < 0) return len // was all spaces
+        while (index >= 0 && points[index] == ' '.code) index--
+        if (index < 0) return length
+        if (points[index] == '\n'.code) return length - index
 
-        // If cursor was right at or immediately after a newline
-        if (textBefore[i] == '\n') {
-            return len - i
-        }
+        fun isBoundary(point: Int): Boolean =
+            point == ','.code || point == '.'.code || point == '?'.code ||
+                point == '!'.code || point == ';'.code || point == ':'.code || point == '\n'.code
 
-        // If cursor was right after a punctuation mark (comma, period, exclamation, question mark, etc.)
-        val ch = textBefore[i]
-        if (ch == ',' || ch == '.' || ch == '?' || ch == '!' || ch == ';' || ch == ':') {
-            // Delete this punctuation mark plus the preceding word
-            i--
-            while (i >= 0 && textBefore[i] == ' ') i--
-            while (i >= 0 && !textBefore[i].isWhitespace() && textBefore[i] !in ",.?!;:\n") {
-                i--
-            }
-            return len - (i + 1)
+        if (isBoundary(points[index]) && points[index] != '\n'.code) {
+            index--
+            while (index >= 0 && points[index] == ' '.code) index--
+            while (index >= 0 && !Character.isWhitespace(points[index]) && !isBoundary(points[index])) index--
+            return length - (index + 1)
         }
 
-        // Search backwards from i to find the nearest structural boundary:
-        // 1. Newline (\n)
-        // 2. Sentence boundary ('.', '?', '!')
-        // 3. Clause boundary (',', ';', ':')
-        var boundaryIndex = -1
-
-        for (idx in i downTo 0) {
-            val c = textBefore[idx]
-            if (c == '\n') {
-                boundaryIndex = idx + 1 // delete everything on the current line after newline
-                break
-            }
-            if (c == '.' || c == '?' || c == '!') {
-                boundaryIndex = idx + 1 // delete everything in the current sentence
-                break
-            }
-            if (c == ',' || c == ';' || c == ':') {
-                boundaryIndex = idx + 1 // delete everything in the current clause
-                break
-            }
+        for (cursor in index downTo 0) {
+            if (isBoundary(points[cursor])) return length - (cursor + 1)
         }
 
-        if (boundaryIndex != -1 && boundaryIndex < len) {
-            val count = len - boundaryIndex
-            if (count > 0) return count
-        }
-
-        // If no punctuation or newline found, delete the word
-        var wordStart = i
-        while (wordStart >= 0 && !textBefore[wordStart].isWhitespace()) {
-            wordStart--
-        }
-        val count = len - (wordStart + 1)
-        return if (count > 0) count else 1
+        var wordStart = index
+        while (wordStart >= 0 && !Character.isWhitespace(points[wordStart])) wordStart--
+        return (length - (wordStart + 1)).coerceAtLeast(1)
     }
 }
