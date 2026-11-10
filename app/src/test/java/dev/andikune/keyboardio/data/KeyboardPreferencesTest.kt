@@ -22,6 +22,17 @@ class KeyboardPreferencesTest {
     }
 
     @Test
+    fun clipboardPrivateModeDefaultsOffAndPersistsChanges() {
+        val preferences = KeyboardPreferences(context)
+        assertEquals(false, preferences.clipboardPrivateMode.value)
+        preferences.setClipboardPrivateMode(true)
+        assertEquals(true, preferences.clipboardPrivateMode.value)
+        assertEquals(true, KeyboardPreferences(context).clipboardPrivateMode.value)
+        preferences.setClipboardPrivateMode(false)
+        assertEquals(false, KeyboardPreferences(context).clipboardPrivateMode.value)
+    }
+
+    @Test
     fun voiceLanguageDefaultsToSystemAndPersistsExplicitChoice() {
         val preferences = KeyboardPreferences(context)
         assertEquals("SYSTEM", preferences.voiceInputLanguage.value)

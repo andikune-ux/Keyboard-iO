@@ -259,6 +259,7 @@ fun MainScreen(
     val soundEnabled by preferences.keySound.collectAsState()
     val longPressDelay by preferences.longPressDelay.collectAsState()
     val clipboardList by clipboardRepo.items.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
 
     fun checkKeyboardStatus() {
         runCatching {
@@ -399,6 +400,7 @@ fun MainScreen(
                 2 -> ClipboardTab(
                     items = clipboardList,
                     rgbTheme = rgbTheme,
+                    isPrivateMode = clipboardPrivateMode,
                     onTogglePin = { clipboardRepo.togglePin(it) },
                     onDeleteItem = { clipboardRepo.removeItem(it) },
                     onClearAll = { clipboardRepo.clearUnpinned() }
@@ -706,6 +708,7 @@ private fun CustomizationTab(
     val swipeTyping by preferences.swipeTyping.collectAsState()
     val auroraWaveEffect by preferences.auroraWaveEffect.collectAsState()
     val keyPopupEffect by preferences.keyPopupEffect.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
     val customBgType by preferences.customBgType.collectAsState()
     val customBgPath by preferences.customBgPath.collectAsState()
     val customBgOpacity by preferences.customBgOpacity.collectAsState()
@@ -1087,6 +1090,57 @@ private fun CustomizationTab(
                             ) { Text("Redup", fontSize = 10.sp) }
                         }
                     }
+                }
+            }
+        }
+
+        // Clipboard privacy: pauses new capture without deleting existing history.
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = rgbTheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Mode Privat Clipboard",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (clipboardPrivateMode)
+                                "Aktif: salinan baru tidak disimpan. Riwayat lama tidak dihapus."
+                            else
+                                "Nonaktif: salinan baru disimpan ke riwayat clipboard.",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = clipboardPrivateMode,
+                        onCheckedChange = preferences::setClipboardPrivateMode,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = rgbTheme.primary,
+                            checkedTrackColor = rgbTheme.primary.copy(alpha = 0.35f)
+                        )
+                    )
                 }
             }
         }
@@ -1843,6 +1897,7 @@ private fun CustomizationTab(
 private fun ClipboardTab(
     items: List<dev.andikune.keyboardio.model.ClipboardItem>,
     rgbTheme: RgbThemeStyle,
+    isPrivateMode: Boolean,
     onTogglePin: (Long) -> Unit,
     onDeleteItem: (Long) -> Unit,
     onClearAll: () -> Unit
@@ -1865,7 +1920,10 @@ private fun ClipboardTab(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Teks yang disalin otomatis tersimpan untuk ditempel cepat.",
+                    text = if (isPrivateMode)
+                        "Mode privat aktif: salinan baru tidak direkam. Riwayat lama tetap tersimpan."
+                    else
+                        "Teks yang disalin otomatis tersimpan untuk ditempel cepat.",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )

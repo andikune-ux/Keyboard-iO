@@ -18,3 +18,9 @@ object TypingInputPrivacy {
                 variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
     }
 }
+
+/** Clipboard capture is disabled for password editors and while user privacy mode is on. */
+object ClipboardCapturePolicy {
+    fun shouldCapture(isPasswordInput: Boolean, privateModeEnabled: Boolean): Boolean =
+        !isPasswordInput && !privateModeEnabled
+}

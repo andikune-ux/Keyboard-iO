@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.andikune.keyboardio.data.ClipboardRepository
+import dev.andikune.keyboardio.data.ClipboardCapturePolicy
 import dev.andikune.keyboardio.data.LongTextChunker
 import dev.andikune.keyboardio.data.SmartDeleteEngine
 import dev.andikune.keyboardio.data.KeyboardPreferences
@@ -313,7 +314,11 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun checkAndRecordClipboard() {
-        if (editorState.value.isPassword) return // Incognito protection
+        if (!ClipboardCapturePolicy.shouldCapture(
+                isPasswordInput = editorState.value.isPassword,
+                privateModeEnabled = preferences.isClipboardPrivateModeEnabled()
+            )
+        ) return
         try {
             val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val clip = clipboardManager?.primaryClip

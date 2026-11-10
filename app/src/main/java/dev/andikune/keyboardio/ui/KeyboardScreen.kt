@@ -170,6 +170,7 @@ fun KeyboardScreen(
     val isAuroraEnabled by preferences.auroraWaveEffect.collectAsState()
     val isPopupEnabled by preferences.keyPopupEffect.collectAsState()
     val isSwipeTypingEnabled by preferences.swipeTyping.collectAsState()
+    val clipboardPrivateMode by preferences.clipboardPrivateMode.collectAsState()
 
     // Custom background states
     val customBgType by preferences.customBgType.collectAsState()
@@ -331,8 +332,11 @@ fun KeyboardScreen(
     }
 
     val latestClipItem = clipboardItems.firstOrNull()
-    val clipboardSuggestion = remember(latestClipItem, dismissedClipId, userHasTypedInSession, composingWord, editorState.isPassword) {
-        if (!editorState.isPassword &&
+    val clipboardSuggestion = remember(
+        latestClipItem, dismissedClipId, userHasTypedInSession, composingWord,
+        editorState.isPassword, clipboardPrivateMode
+    ) {
+        if (!editorState.isPassword && !clipboardPrivateMode &&
             !userHasTypedInSession &&
             composingWord.isEmpty() &&
             latestClipItem != null &&
@@ -705,6 +709,7 @@ fun KeyboardScreen(
                         ClipboardPanel(
                             items = clipboardItems,
                             rgbTheme = rgbTheme,
+                            isPrivateMode = clipboardPrivateMode,
                             onPasteText = { text ->
                                 onPasteText(text)
                                 activePanel = ActivePanel.NONE

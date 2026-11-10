@@ -62,6 +62,7 @@ fun ClipboardPanel(
     onDeleteItem: (Long) -> Unit,
     onClearAll: () -> Unit,
     onClose: () -> Unit,
+    isPrivateMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
@@ -128,6 +129,15 @@ fun ClipboardPanel(
                     )
                 }
             }
+        }
+
+        if (isPrivateMode) {
+            Text(
+                text = "Mode privat aktif — salinan baru tidak direkam. Riwayat lama tetap tersimpan.",
+                color = rgbTheme.secondary,
+                fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+            )
         }
 
         if (items.isEmpty()) {

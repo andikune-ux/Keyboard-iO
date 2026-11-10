@@ -89,6 +89,9 @@ class KeyboardPreferences(context: Context) {
     private val _keyPopupEffect = MutableStateFlow(loadKeyPopup())
     val keyPopupEffect: StateFlow<Boolean> = _keyPopupEffect.asStateFlow()
 
+    private val _clipboardPrivateMode = MutableStateFlow(loadClipboardPrivateMode())
+    val clipboardPrivateMode: StateFlow<Boolean> = _clipboardPrivateMode.asStateFlow()
+
     fun setTheme(theme: RgbThemeStyle) {
         prefs.edit().putString("rgb_theme", theme.id).apply()
         _theme.value = theme
@@ -229,6 +232,18 @@ class KeyboardPreferences(context: Context) {
     }
 
     private fun loadKeyPopup(): Boolean = prefs.getBoolean("key_popup", true)
+
+    fun setClipboardPrivateMode(enabled: Boolean) {
+        prefs.edit().putBoolean("clipboard_private_mode", enabled).apply()
+        _clipboardPrivateMode.value = enabled
+    }
+
+    private fun loadClipboardPrivateMode(): Boolean =
+        prefs.getBoolean("clipboard_private_mode", false)
+
+    /** Read the persisted value directly so an active IME observes Settings changes. */
+    fun isClipboardPrivateModeEnabled(): Boolean =
+        prefs.getBoolean("clipboard_private_mode", false)
 
     // Custom Background Settings (Photo / Video from Gallery)
     private val _customBgType = MutableStateFlow(loadCustomBgType())
