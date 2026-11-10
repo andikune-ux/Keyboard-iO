@@ -806,7 +806,6 @@ fun KeyboardScreen(
                                                 val trailOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
                                                 if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + trailOffset, position.y))
                                             }
-                                            // Only begin a swipe on a letter key; action keys remain normal taps.
                                             if (letterAt(down.position) != null) {
                                                 swipeTrail.clear()
                                                 collectKey(down.position)
@@ -825,22 +824,6 @@ fun KeyboardScreen(
                                                     swipeTrail.clear()
                                                 }
                                             }
-                                        }
-                                    }
-                                                    if (!change.pressed) {
-                                                        if (dragging && pathLetters.length >= 3) WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
-                                                        break
-                                                    }
-                                                    if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
-                                                    if (dragging) { collectKey(change.position); change.consume() }
-                                                }
-                                                swipeTrail.clear()
-                                            }
-                                        }
-                                    }
-                                            }
-                                        }
-                                    }
                                         }
                                     }
                                 }                        ) {
