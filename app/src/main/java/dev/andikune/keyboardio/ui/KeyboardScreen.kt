@@ -1116,7 +1116,7 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.Apps,
                     contentDescription = "Menu Fitur",
                     tint = rgbTheme.primary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(18.dp)
                 )
                 Text(
                     text = " iO",
@@ -1135,7 +1135,7 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Input Suara / Dikte",
                     tint = NeonCyan,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
@@ -1148,7 +1148,7 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.SentimentSatisfiedAlt,
                     contentDescription = "Ikon Emoji Utama",
                     tint = TextPrimary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
         }
@@ -1280,7 +1280,7 @@ private fun TopHeaderBar(
                 exit = shrinkHorizontally() + fadeOut()
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
