@@ -798,7 +798,8 @@ fun KeyboardScreen(
                                             fun collectKey(position: Offset) {
                                                 val letter = letterAt(position)
                                                 if (letter != null && pathLetters.lastOrNull() != letter) pathLetters.append(letter)
-                                                if (swipeTrail.size < 100) swipeTrail.add(position)
+                                                val trailOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
+                                                if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + trailOffset, position.y))
                                             }
                                             // Only begin a swipe on a letter key; action keys remain normal taps.
                                             if (letterAt(down.position) != null) {
@@ -815,6 +816,9 @@ fun KeyboardScreen(
                                                     if (dragging) { collectKey(change.position); change.consume() }
                                                 }
                                                 swipeTrail.clear()
+                                            }
+                                        }
+                                    }
                                             }
                                         }
                                     }
