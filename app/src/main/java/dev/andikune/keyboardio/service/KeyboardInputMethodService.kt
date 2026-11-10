@@ -385,34 +385,36 @@ class KeyboardInputMethodService : InputMethodService(),
                     editorContext.cursorAtWordEnd && currentWord.length >= 3) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
-                        // Replace current typo with corrected word
+                        // Never replace a word if the live editor no longer matches the
+                        // composing snapshot. In that case, continue with normal Space.
                         val before = ic.getTextBeforeCursor(currentWord.length, 0)?.toString().orEmpty()
-                        if (!before.equals(currentWord, ignoreCase = true)) {
+                        if (before.equals(currentWord, ignoreCase = true)) {
+                            val replacement = EditorTextContextSynchronizer.autoCorrectionCommitText(
+                                autoFixed,
+                                editorContext.textAfterWord
+                            )
+                            val result = EditorWordReplacement.replace(
+                                connection = ic,
+                                beforeCodePoints = currentWord.codePointCount(0, currentWord.length),
+                                afterCodePoints = 0,
+                                originalText = currentWord,
+                                replacementText = replacement
+                            )
+                            if (result.succeeded) {
+                                removeFromSessionSuffix(currentWord)
+                                appendToSession(replacement)
+                                recordUndo(currentWord, replacement)
+                                userWordHistory.learn(autoFixed, previousWord.value)
+                                composingWord.value = ""
+                                previousWord.value = autoFixed.lowercase(Locale.ROOT)
+                                composingWordManuallyEdited = false
+                                return
+                            }
+                            // A failed replacement must not swallow the user's Space key.
                             syncComposingWordFromEditor()
-                            return
-                        }
-                        val replacement = EditorTextContextSynchronizer.autoCorrectionCommitText(
-                            autoFixed,
-                            editorContext.textAfterWord
-                        )
-                        val result = EditorWordReplacement.replace(
-                            connection = ic,
-                            beforeCodePoints = currentWord.codePointCount(0, currentWord.length),
-                            afterCodePoints = 0,
-                            originalText = currentWord,
-                            replacementText = replacement
-                        )
-                        if (result.succeeded) {
-                            removeFromSessionSuffix(currentWord)
-                            appendToSession(replacement)
-                            recordUndo(currentWord, replacement)
-                            userWordHistory.learn(autoFixed, previousWord.value)
-                            composingWord.value = ""
-                            previousWord.value = autoFixed.lowercase(Locale.ROOT)
-                        } else if (!result.rollbackSucceeded) {
+                        } else {
                             syncComposingWordFromEditor()
                         }
-                        return
                     }
                 }
                 if (currentWord.isNotBlank()) {
