@@ -731,8 +731,8 @@ private fun CustomizationTab(
                     preferences.setCustomBackground(
                         type = if (isVideo) "VIDEO" else "IMAGE",
                         path = destFile.absolutePath,
-                        opacity = 0.45f,
-                        dim = 0.5f
+                        opacity = 0.92f,
+                        dim = 0.10f
                     )
                 }.onFailure {
                     Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
@@ -921,7 +921,7 @@ private fun CustomizationTab(
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Transparansi / Opacity Media: ${(customBgOpacity * 100).toInt()}%",
+                            text = "Keterlihatan Foto/Video: ${(customBgOpacity * 100).toInt()}%",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
@@ -934,21 +934,66 @@ private fun CustomizationTab(
                                 activeTrackColor = rgbTheme.primary
                             )
                         )
+                        Text(
+                            text = "100% = media terlihat penuh. Turunkan jika ingin lebih transparan.",
+                            color = TextTertiary,
+                            fontSize = 10.sp
+                        )
 
                         Text(
-                            text = "Lapisan Redup / Dimming Gelap: ${(customBgDim * 100).toInt()}%",
+                            text = "Lapisan Gelap: ${(customBgDim * 100).toInt()}%",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
                         Slider(
                             value = customBgDim,
                             onValueChange = { preferences.setCustomBgDim(it) },
-                            valueRange = 0.0f..0.9f,
+                            valueRange = 0.0f..0.75f,
                             colors = SliderDefaults.colors(
                                 thumbColor = rgbTheme.secondary,
                                 activeTrackColor = rgbTheme.secondary
                             )
                         )
+                        Text(
+                            text = "0% = tanpa lapisan gelap. Gunakan nilai kecil agar foto/video tetap jelas.",
+                            color = TextTertiary,
+                            fontSize = 10.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Preset cepat", color = TextSecondary, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(1f)
+                                    preferences.setCustomBgDim(0f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Terang", fontSize = 10.sp) }
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(0.92f)
+                                    preferences.setCustomBgDim(0.10f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Seimbang", fontSize = 10.sp) }
+                            Button(
+                                onClick = {
+                                    preferences.setCustomBgOpacity(0.80f)
+                                    preferences.setCustomBgDim(0.25f)
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberKeyBg)
+                            ) { Text("Redup", fontSize = 10.sp) }
+                        }
                     }
                 }
             }

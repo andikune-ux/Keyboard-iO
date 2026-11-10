@@ -1412,37 +1412,52 @@ private fun SafeVideoBackground(
     opacity: Float,
     modifier: Modifier = Modifier
 ) {
-    AndroidView(
-        factory = { ctx ->
-            TextureView(ctx).apply {
-                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    var mediaPlayer: MediaPlayer? = null
-                    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                        runCatching {
-                            mediaPlayer = MediaPlayer().apply {
-                                setDataSource(videoPath)
-                                setSurface(Surface(surface))
-                                isLooping = true
-                                setVolume(0f, 0f) // Completely muted, 0% audio noise
-                                setOnErrorListener { _, _, _ -> true }
-                                prepareAsync()
-                                setOnPreparedListener { start() }
+    androidx.compose.runtime.key(videoPath) {
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        var mediaPlayer: MediaPlayer? = null
+                        var videoSurface: Surface? = null
+
+                        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                            runCatching {
+                                videoSurface = Surface(surface)
+                                mediaPlayer = MediaPlayer().apply {
+                                    setDataSource(videoPath)
+                                    setSurface(videoSurface)
+                                    isLooping = true
+                                    setVolume(0f, 0f)
+                                    setOnErrorListener { _, _, _ -> true }
+                                    setOnPreparedListener { player -> player.start() }
+                                    prepareAsync()
+                                }
+                            }.onFailure {
+                                runCatching { mediaPlayer?.release() }
+                                mediaPlayer = null
+                                runCatching { videoSurface?.release() }
+                                videoSurface = null
                             }
                         }
-                    }
-                    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
-                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                        runCatching {
-                            mediaPlayer?.stop()
-                            mediaPlayer?.release()
+
+                        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
+
+                        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                            runCatching {
+                                mediaPlayer?.stop()
+                                mediaPlayer?.release()
+                            }
                             mediaPlayer = null
+                            runCatching { videoSurface?.release() }
+                            videoSurface = null
+                            return true
                         }
-                        return true
+
+                        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
                     }
-                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
                 }
-            }
-        },
-        modifier = modifier.alpha(opacity)
-    )
+            },
+            modifier = modifier.alpha(opacity)
+        )
+    }
 }
