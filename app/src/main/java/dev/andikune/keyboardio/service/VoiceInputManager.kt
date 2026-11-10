@@ -106,7 +106,7 @@ class VoiceInputManager(
             speechRecognizer?.startListening(intent)
             _isListening.value = true
         } catch (e: Exception) {
-            _isListening.value = false
+            releaseRecognizer()
             _errorMessage.value = "Gagal memulai mikrofon: ${e.message}"
         }
     }

@@ -140,6 +140,9 @@ class KeyboardUnitTest {
         val wordText = "Halo dunia"
         val countWord = dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount(wordText)
         assertEquals("dunia".length, countWord)
+
+        // Unicode emoji is one code point, not two UTF-16 code units.
+        assertEquals(1, dev.andikune.keyboardio.data.SmartDeleteEngine.calculateSmartDeleteCount("Halo 😀"))
     }
 
     @Test

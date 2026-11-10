@@ -391,10 +391,12 @@ class KeyboardInputMethodService : InputMethodService(),
             syncComposingWordFromEditor()
             return
         }
-        val deleteCount = SmartDeleteEngine.calculateSmartDeleteCount(textBefore).coerceIn(0, textBefore.length)
+        val deleteCount = SmartDeleteEngine.calculateSmartDeleteCount(textBefore)
+            .coerceIn(0, textBefore.codePointCount(0, textBefore.length))
         if (deleteCount > 0) {
-            val deleted = textBefore.takeLast(deleteCount)
-            ic.deleteSurroundingText(deleteCount, 0)
+            val start = textBefore.offsetByCodePoints(textBefore.length, -deleteCount)
+            val deleted = textBefore.substring(start)
+            ic.deleteSurroundingTextInCodePoints(deleteCount, 0)
             recordUndo(deleted, "")
         }
         syncComposingWordFromEditor()
