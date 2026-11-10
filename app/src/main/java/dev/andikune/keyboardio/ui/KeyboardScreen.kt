@@ -446,6 +446,11 @@ fun KeyboardScreen(
                                 }.getOrNull()
                             }
                         }
+                        // Release decoded native bitmap memory when the wallpaper changes
+                        // or this keyboard composition leaves the screen.
+                        androidx.compose.runtime.DisposableEffect(bitmap) {
+                            onDispose { bitmap?.recycle() }
+                        }
                         bitmap?.let { decodedBitmap ->
                             Image(
                                 bitmap = decodedBitmap.asImageBitmap(),
@@ -1423,6 +1428,70 @@ private fun OneHandedSideBar(
     }
 }
 
+private class SafeVideoSurfaceListener(
+    private val videoPath: String
+) : TextureView.SurfaceTextureListener {
+    private var mediaPlayer: MediaPlayer? = null
+    private var videoSurface: Surface? = null
+
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        release()
+        try {
+            val outputSurface = Surface(surface)
+            videoSurface = outputSurface
+            val player = MediaPlayer()
+            mediaPlayer = player
+            player.setDataSource(videoPath)
+            player.setSurface(outputSurface)
+            player.isLooping = true
+            player.setVolume(0f, 0f)
+            // Match image ContentScale.Crop so videos keep their aspect ratio.
+            player.setVideoScalingMode(
+                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            )
+            player.setOnErrorListener { failedPlayer, _, _ ->
+                if (mediaPlayer === failedPlayer) mediaPlayer = null
+                runCatching { failedPlayer.release() }
+                true
+            }
+            player.setOnPreparedListener { preparedPlayer ->
+                if (mediaPlayer === preparedPlayer) {
+                    runCatching { preparedPlayer.start() }
+                        .onFailure {
+                            if (mediaPlayer === preparedPlayer) mediaPlayer = null
+                            runCatching { preparedPlayer.release() }
+                        }
+                } else {
+                    runCatching { preparedPlayer.release() }
+                }
+            }
+            player.prepareAsync()
+        } catch (_: Exception) {
+            release()
+        }
+    }
+
+    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
+
+    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        release()
+        return true
+    }
+
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
+    fun release() {
+        val player = mediaPlayer
+        mediaPlayer = null
+        if (player != null) {
+            runCatching { player.stop() }
+            runCatching { player.release() }
+        }
+        videoSurface?.let { runCatching { it.release() } }
+        videoSurface = null
+    }
+}
+
 @Composable
 private fun SafeVideoBackground(
     videoPath: String,
@@ -1433,61 +1502,14 @@ private fun SafeVideoBackground(
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
-                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                        var mediaPlayer: MediaPlayer? = null
-                        var videoSurface: Surface? = null
-
-                        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                            runCatching {
-                                videoSurface = Surface(surface)
-                                mediaPlayer = MediaPlayer().apply {
-                                    setDataSource(videoPath)
-                                    setSurface(videoSurface)
-                                    isLooping = true
-                                    setVolume(0f, 0f)
-                                    // Match image ContentScale.Crop so videos keep their aspect ratio
-                                    // instead of stretching to the keyboard's dimensions.
-                                    setVideoScalingMode(
-                                        MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-                                    )
-                                    setOnErrorListener { player, _, _ ->
-                                        if (mediaPlayer === player) mediaPlayer = null
-                                        runCatching { player.release() }
-                                        true
-                                    }
-                                    setOnPreparedListener { player ->
-                                        runCatching { player.start() }
-                                            .onFailure {
-                                                if (mediaPlayer === player) mediaPlayer = null
-                                                runCatching { player.release() }
-                                            }
-                                    }
-                                    prepareAsync()
-                                }
-                            }.onFailure {
-                                runCatching { mediaPlayer?.release() }
-                                mediaPlayer = null
-                                runCatching { videoSurface?.release() }
-                                videoSurface = null
-                            }
-                        }
-
-                        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
-
-                        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                            runCatching { mediaPlayer?.stop() }
-                            runCatching { mediaPlayer?.release() }
-                            mediaPlayer = null
-                            runCatching { videoSurface?.release() }
-                            videoSurface = null
-                            return true
-                        }
-
-                        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-                    }
+                    surfaceTextureListener = SafeVideoSurfaceListener(videoPath)
                 }
             },
-            modifier = modifier.alpha(opacity)
+            modifier = modifier.alpha(opacity),
+            onRelease = { view ->
+                (view.surfaceTextureListener as? SafeVideoSurfaceListener)?.release()
+                view.surfaceTextureListener = null
+            }
         )
     }
 }
