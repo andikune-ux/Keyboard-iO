@@ -33,6 +33,7 @@ import dev.andikune.keyboardio.data.LongTextChunker
 import dev.andikune.keyboardio.data.SmartDeleteEngine
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.TypingActivityStore
+import dev.andikune.keyboardio.data.TypingInputPrivacy
 import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.model.EnterActionType
@@ -202,10 +203,7 @@ class KeyboardInputMethodService : InputMethodService(),
         val classType = inputType and InputType.TYPE_MASK_CLASS
         val variation = inputType and InputType.TYPE_MASK_VARIATION
 
-        val isPassword = variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
-                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
-                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
-                (classType == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        val isPassword = TypingInputPrivacy.isPasswordInputType(inputType)
 
         val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE ||
                 classType == InputType.TYPE_CLASS_NUMBER || classType == InputType.TYPE_CLASS_DATETIME

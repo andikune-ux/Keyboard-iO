@@ -1,6 +1,7 @@
 package dev.andikune.keyboardio.data
 
 import android.content.Context
+import android.text.InputType
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -189,4 +190,27 @@ class TypingActivityStoreTest {
         assertEquals(start, session.startedAt)
         assertEquals(end, session.endedAt)
     }
+    @Test
+    fun excludesEveryPasswordInputVariationFromTypingCapture() {
+        val passwordTypes = listOf(
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        )
+
+        passwordTypes.forEach { inputType ->
+            assertTrue(TypingInputPrivacy.isPasswordInputType(inputType))
+        }
+    }
+
+    @Test
+    fun keepsOrdinaryTextAndNumericFieldsEligibleForTypingCapture() {
+        assertTrue(!TypingInputPrivacy.isPasswordInputType(InputType.TYPE_CLASS_TEXT))
+        assertTrue(!TypingInputPrivacy.isPasswordInputType(InputType.TYPE_CLASS_NUMBER))
+        assertTrue(!TypingInputPrivacy.isPasswordInputType(
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_NORMAL
+        ))
+    }
+
 }
