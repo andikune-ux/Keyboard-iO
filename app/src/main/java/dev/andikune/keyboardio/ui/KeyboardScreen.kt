@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -1088,22 +1089,27 @@ private fun TopHeaderBar(
     onQuickClipboard: () -> Unit,
     onUndo: () -> Unit
 ) {
-    Row(
+    // Overlay layout: suggestion center is anchored to the actual keyboard center,
+    // not to the leftover width between left and right control groups.
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
             .background(CyberDarkSurface)
             .border(0.5.dp, CyberBorder)
-            .padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 4.dp)
     ) {
-        // Keep the three primary controls evenly spaced and visually balanced.
+        val leftControlsWidth = 144.dp // 3 controls, each retaining a 48dp touch target.
+        val rightControlsWidth = if (isToolsOpen) 216.dp else 48.dp
+        val centerAvailableWidth = (maxWidth - leftControlsWidth - rightControlsWidth - 8.dp)
+            .coerceAtLeast(0.dp)
+
+        // Left controls stay grouped at the left edge with compact visual icon spacing.
         Row(
+            modifier = Modifier.align(Alignment.CenterStart),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Text "iO" & Grid Menu
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -1126,8 +1132,6 @@ private fun TopHeaderBar(
                     fontWeight = FontWeight.Bold
                 )
             }
-
-            // Speech-to-Text / Voice Input Button (Tepat di samping teks iO)
             IconButton(
                 onClick = onOpenVoiceInput,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("speech_to_text_button")
@@ -1136,12 +1140,9 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Input Suara / Dikte",
                     tint = NeonCyan,
-                    // Keep the 48dp touch target, but bring the glyph visually toward Emoji.
-                    modifier = Modifier.offset(x = 7.dp).size(20.dp)
+                    modifier = Modifier.offset(x = 5.dp).size(20.dp)
                 )
             }
-
-            // Main Emoji Icon (Samping tombol Speech-to-Text)
             IconButton(
                 onClick = onOpenEmoji,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("main_emoji_button")
@@ -1150,130 +1151,126 @@ private fun TopHeaderBar(
                     imageVector = Icons.Default.SentimentSatisfiedAlt,
                     contentDescription = "Ikon Emoji Utama",
                     tint = TextPrimary,
-                    // Visual offset only; the full 48dp clickable target remains unchanged.
-                    modifier = Modifier.offset(x = (-7).dp).size(20.dp)
+                    modifier = Modifier.offset(x = (-5).dp).size(20.dp)
                 )
             }
         }
 
-        // Center Area: Password Guard OR Clipboard Suggestion Chip OR Word Suggestions Strip (Saran Pengetikan Cerdas)
-        if (isPassword) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(CyberCard)
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = NeonGreen,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = "Sandi (Aman)",
-                    color = NeonGreen,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        } else if (clipboardSuggestion != null && !isToolsOpen) {
-            // Saran Tempel Hasil Salin (Gboard clipboard chip with one-time dismiss)
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(CyberCard)
-                        .border(0.8.dp, rgbTheme.primary, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                ) {
+        // Centered independently of both side groups; width is capped to prevent overlap.
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .widthIn(max = centerAvailableWidth)
+                .fillMaxWidth()
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                isPassword -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable { onPasteClipboardSuggestion(clipboardSuggestion) }
-                            .testTag("clipboard_suggestion_pill")
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(CyberCard)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Tempel",
-                            tint = rgbTheme.primary,
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = NeonGreen,
                             modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        val cleanDisplay = clipboardSuggestion.take(15).replace('\n', ' ')
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
-                            color = TextPrimary,
+                            text = "Sandi (Aman)",
+                            color = NeonGreen,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Abaikan saran tempel",
-                        tint = TextTertiary,
-                        modifier = Modifier
-                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                            .clip(CircleShape)
-                            .clickable { onDismissClipboardSuggestion() }
-                            .testTag("dismiss_clipboard_suggestion")
-                    )
                 }
-            }
-        } else if (suggestions.isNotEmpty() && !isToolsOpen) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    suggestions.take(3).forEach { word ->
-                        Box(
+                clipboardSuggestion != null && !isToolsOpen -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(CyberCard)
+                            .border(0.8.dp, rgbTheme.primary, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(CyberCard)
-                                .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                .clickable { onSuggestionPicked(word) }
-                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                                .clickable { onPasteClipboardSuggestion(clipboardSuggestion) }
+                                .testTag("clipboard_suggestion_pill")
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = "Tempel",
+                                tint = rgbTheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val cleanDisplay = clipboardSuggestion.take(15).replace('\\n', ' ')
                             Text(
-                                text = word,
+                                text = "Tempel: \"$cleanDisplay${if (clipboardSuggestion.length > 15) "…" else ""}\"",
                                 color = TextPrimary,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Abaikan saran tempel",
+                            tint = TextTertiary,
+                            modifier = Modifier
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .clip(CircleShape)
+                                .clickable { onDismissClipboardSuggestion() }
+                                .testTag("dismiss_clipboard_suggestion")
+                        )
+                    }
+                }
+                suggestions.isNotEmpty() && !isToolsOpen -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        suggestions.take(3).forEach { word ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(CyberCard)
+                                    .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                    .clickable { onSuggestionPicked(word) }
+                                    .padding(horizontal = 7.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = word,
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
         }
 
-        // Group Right: Single Door Toggle Button ("Tombol Pintu Buka Tutup")
-        // Triggers showing / hiding secondary tools (Terjemahan, Font Unik, Clipboard, Kembali/Undo)
+        // Right controls are anchored independently to the right edge.
         Row(
-            modifier = Modifier.widthIn(max = 168.dp).horizontalScroll(rememberScrollState()),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .widthIn(max = 216.dp)
+                .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
         ) {
@@ -1332,8 +1329,6 @@ private fun TopHeaderBar(
                     }
                 }
             }
-
-            // Tombol Pintu Buka Tutup (Pemicu sembunyikan/tampilkan tombol peralatan sebelah kanan)
             IconButton(
                 onClick = onToggleTools,
                 modifier = Modifier
