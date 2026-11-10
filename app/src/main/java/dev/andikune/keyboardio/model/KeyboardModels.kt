@@ -64,8 +64,8 @@ data class KeyboardEditorState(
     val isPassword: Boolean = false,
     val isNumberOnly: Boolean = false,
     val isAutoCorrectionAllowed: Boolean = true,
-    val isSuggestionsAllowed: Boolean = true,
-    val enterAction: EnterActionType = EnterActionType.RETURN
+    val enterAction: EnterActionType = EnterActionType.RETURN,
+    val isSuggestionsAllowed: Boolean = true
 )
 
 enum class RgbThemeStyle(
