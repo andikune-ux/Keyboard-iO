@@ -561,11 +561,6 @@ class KeyboardInputMethodService : InputMethodService(),
         }
     }
 
-    private fun replaceSessionSuffix(oldText: String, newText: String) {
-        removeFromSessionSuffix(oldText)
-        appendToSession(newText)
-    }
-
     private fun finishTypingSession() {
         if (!sessionActive) return
         val endedAt = System.currentTimeMillis()

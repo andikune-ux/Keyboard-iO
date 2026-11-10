@@ -137,15 +137,14 @@ class TypingActivityStore(context: Context) {
                 val startedAt = draft.optLong("startedAt", now)
                 val updatedAt = draft.optLong("updatedAt", startedAt)
                 val text = draft.optString("text", "")
-                if (now - updatedAt >= RETENTION_MS) null
-                else TypingSessionRecord(
+                TypingSessionRecord(
                     startedAt = startedAt,
-                    endedAt = updatedAt,
-                    createdAt = updatedAt,
+                    endedAt = now,
+                    createdAt = now,
                     text = text,
                     charCount = text.codePointCount(0, text.length),
                     wordCount = SESSION_WORD_PATTERN.findAll(text).count(),
-                    durationMs = (updatedAt - startedAt).coerceAtLeast(0L)
+                    durationMs = (now - startedAt).coerceAtLeast(0L)
                 )
             }.getOrNull()
         }
