@@ -428,7 +428,8 @@ fun KeyboardScreen(
                                 val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                                 BitmapFactory.decodeFile(customBgPath, opts)
                                 var sampleSize = 1
-                                while ((opts.outWidth / sampleSize) > 1280 || (opts.outHeight / sampleSize) > 720) {
+                                val largestDimension = maxOf(opts.outWidth, opts.outHeight)
+                                while (largestDimension > 1280 * sampleSize) {
                                     sampleSize *= 2
                                 }
                                 val decodeOpts = BitmapFactory.Options().apply {
@@ -1437,7 +1438,11 @@ private fun SafeVideoBackground(
                                     setSurface(videoSurface)
                                     isLooping = true
                                     setVolume(0f, 0f)
-                                    setOnErrorListener { _, _, _ -> true }
+                                    setOnErrorListener { player, _, _ ->
+                                        if (mediaPlayer === player) mediaPlayer = null
+                                        runCatching { player.release() }
+                                        true
+                                    }
                                     setOnPreparedListener { player -> player.start() }
                                     prepareAsync()
                                 }
