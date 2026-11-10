@@ -264,6 +264,7 @@ class KeyboardInputMethodService : InputMethodService(),
             enterAction = enterAction
         )
         composingWord.value = ""
+        composingWordManuallyEdited = false
         undoStack.clear()
         updatePreviousWord()
 
@@ -351,6 +352,7 @@ class KeyboardInputMethodService : InputMethodService(),
                 if (selected.isNotEmpty()) {
                     if (ic.commitText("", 1)) {
                         removeFromSessionSuffix(selected)
+                        composingWordManuallyEdited = true
                         recordUndo(selected, "")
                     }
                 } else {
@@ -365,6 +367,7 @@ class KeyboardInputMethodService : InputMethodService(),
                         }.getOrDefault(false)
                         if (deleted) {
                             removeFromSessionSuffix(removed)
+                            composingWordManuallyEdited = true
                             recordUndo(removed, "")
                         }
                     }
@@ -377,6 +380,8 @@ class KeyboardInputMethodService : InputMethodService(),
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
                 if (preferences.isAutoCorrectionEnabled() && editorState.value.isAutoCorrectionAllowed &&
+                    !composingWordManuallyEdited &&
+                    editorContext.isReliable && !editorContext.hasSelection &&
                     editorContext.cursorAtWordEnd && currentWord.length >= 3) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
@@ -414,6 +419,7 @@ class KeyboardInputMethodService : InputMethodService(),
                     userWordHistory.learn(currentWord, previousWord.value)
                 }
                 commitText(" ")
+                composingWordManuallyEdited = false
                 composingWord.value = ""
                 updatePreviousWord()
             }
@@ -554,6 +560,7 @@ class KeyboardInputMethodService : InputMethodService(),
             replacementText = inserted
         )
         if (result.succeeded) {
+            composingWordManuallyEdited = false
             if (deletedText.isNotEmpty()) removeFromSessionSuffix(deletedText)
             appendToSession(inserted)
             recordUndo(deletedText, inserted)
