@@ -361,9 +361,10 @@ class KeyboardInputMethodService : InputMethodService(),
                         val deleted = ic.deleteSurroundingTextInCodePoints(
                             currentWord.codePointCount(0, currentWord.length), 0
                         )
+                        if (deleted) removeFromSessionSuffix(currentWord)
                         val replacement = "$autoFixed "
                         if (deleted && ic.commitText(replacement, 1)) {
-                            replaceSessionSuffix(currentWord, replacement)
+                            appendToSession(replacement)
                             recordUndo(currentWord, replacement)
                             userWordHistory.learn(autoFixed, previousWord.value)
                             composingWord.value = ""
@@ -390,20 +391,24 @@ class KeyboardInputMethodService : InputMethodService(),
 
                 if (isMultiline) {
                     if (noEnterAction || actionId == EditorInfo.IME_ACTION_NONE || actionId == EditorInfo.IME_ACTION_UNSPECIFIED || actionId == EditorInfo.IME_ACTION_DONE) {
-                        if (ic.commitText("\n", 1)) appendToSession("\n")
+                        if (ic.commitText("\n", 1)) {
+                            appendToSession("\n")
+                            recordUndo("", "\n")
+                        }
                     } else {
                         ic.performEditorAction(actionId)
                     }
                 } else if (actionId != EditorInfo.IME_ACTION_NONE && actionId != EditorInfo.IME_ACTION_UNSPECIFIED) {
                     ic.performEditorAction(actionId)
                 } else {
-                    if (ic.commitText("\n", 1)) appendToSession("\n") else {
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                    if (ic.commitText("\n", 1)) {
+                        appendToSession("\n")
+                        recordUndo("", "\n")
+                    } else {
+                        val downSent = ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        val upSent = ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                        if (downSent || upSent) appendToSession("\n")
                     }
-                }
-                if (isMultiline && (noEnterAction || actionId == EditorInfo.IME_ACTION_NONE || actionId == EditorInfo.IME_ACTION_UNSPECIFIED || actionId == EditorInfo.IME_ACTION_DONE)) {
-                    recordUndo("", "\n")
                 }
                 composingWord.value = ""
             }
@@ -478,9 +483,9 @@ class KeyboardInputMethodService : InputMethodService(),
         val currentPrefix = composingWord.value
         val deletedPrefix = currentPrefix.isNotEmpty() &&
             ic.deleteSurroundingTextInCodePoints(currentPrefix.codePointCount(0, currentPrefix.length), 0)
+        if (deletedPrefix) removeFromSessionSuffix(currentPrefix)
         val inserted = "$cleanWord "
         if (ic.commitText(inserted, 1)) {
-            if (deletedPrefix) removeFromSessionSuffix(currentPrefix)
             appendToSession(inserted)
             recordUndo(if (deletedPrefix) currentPrefix else "", inserted)
             userWordHistory.learn(cleanWord, previousWord.value)
@@ -531,10 +536,13 @@ class KeyboardInputMethodService : InputMethodService(),
             return
         }
         if (operation.insertedText.isNotEmpty()) {
-            ic.deleteSurroundingTextInCodePoints(operation.insertedText.codePointCount(0, operation.insertedText.length), 0)
-            removeFromSessionSuffix(operation.insertedText)
+            if (ic.deleteSurroundingTextInCodePoints(operation.insertedText.codePointCount(0, operation.insertedText.length), 0)) {
+                removeFromSessionSuffix(operation.insertedText)
+            }
         }
-        if (operation.deletedText.isNotEmpty() && ic.commitText(operation.deletedText, 1)) appendToSession(operation.deletedText)
+        if (operation.deletedText.isNotEmpty() && ic.commitText(operation.deletedText, 1)) {
+            appendToSession(operation.deletedText)
+        }
         syncComposingWordFromEditor()
     }
 
