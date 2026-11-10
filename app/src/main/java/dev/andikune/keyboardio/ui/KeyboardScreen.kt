@@ -93,6 +93,7 @@ import androidx.compose.ui.unit.sp
 import dev.andikune.keyboardio.data.ClipboardRepository
 import dev.andikune.keyboardio.data.KeyboardPreferences
 import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.data.SwipeKeyGeometry
 import dev.andikune.keyboardio.model.ActivePanel
 import dev.andikune.keyboardio.model.AuroraWave
 import dev.andikune.keyboardio.model.KeyAction
@@ -793,48 +794,30 @@ fun KeyboardScreen(
                                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
                                             val pathLetters = StringBuilder()
                                             var dragging = false
+                                            fun letterAt(position: Offset): Char? = SwipeKeyGeometry.letterAt(position.x, position.y, keyboardWidth, rowHeightPx)
                                             fun collectKey(position: Offset) {
-                                                val row = (position.y / rowHeightPx).toInt()
-                                                val letter = when (row) {
-                                                    0 -> {
-                                                        val unit = keyboardWidth / 10f
-                                                        val index = ((position.x / unit) - 0.5f).roundToInt()
-                                                        "qwertyuiop".getOrNull(index)
-                                                    }
-                                                    1 -> {
-                                                        val unit = keyboardWidth / 10f
-                                                        val index = ((position.x / unit) - 1f).roundToInt()
-                                                        "asdfghjkl".getOrNull(index)
-                                                    }
-                                                    2 -> {
-                                                        val unit = keyboardWidth / 9.6f
-                                                        val index = ((position.x / unit) - 1.8f).roundToInt()
-                                                        "zxcvbnm".getOrNull(index)
-                                                    }
-                                                    else -> null
-                                                }
+                                                val letter = letterAt(position)
                                                 if (letter != null && pathLetters.lastOrNull() != letter) pathLetters.append(letter)
-                                                val drawOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
-                                                if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + drawOffset, position.y))
+                                                if (swipeTrail.size < 100) swipeTrail.add(position)
                                             }
-                                            swipeTrail.clear()
-                                            collectKey(down.position)
-                                            while (true) {
-                                                val event = awaitPointerEvent(PointerEventPass.Final)
-                                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                                if (!change.pressed) {
-                                                    if (dragging) {
-                                                        WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
+                                            // Only begin a swipe on a letter key; action keys remain normal taps.
+                                            if (letterAt(down.position) != null) {
+                                                swipeTrail.clear()
+                                                collectKey(down.position)
+                                                while (true) {
+                                                    val event = awaitPointerEvent(PointerEventPass.Final)
+                                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                    if (!change.pressed) {
+                                                        if (dragging && pathLetters.length >= 3) WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
+                                                        break
                                                     }
-                                                    break
+                                                    if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
+                                                    if (dragging) { collectKey(change.position); change.consume() }
                                                 }
-                                                if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
-                                                if (dragging) {
-                                                    collectKey(change.position)
-                                                    change.consume()
-                                                }
+                                                swipeTrail.clear()
                                             }
-                                            swipeTrail.clear()
+                                        }
+                                    }
                                         }
                                     }
                                 }                        ) {
