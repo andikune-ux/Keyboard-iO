@@ -1097,6 +1097,7 @@ private fun TopHeaderBar(
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onOpenGridMenu)
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .padding(horizontal = 5.dp, vertical = 3.dp)
                     .testTag("grid_menu_button")
             ) {
@@ -1416,7 +1417,7 @@ private fun OneHandedSideBar(
 
         IconButton(
             onClick = onSwitchSide,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Icon(
                 imageVector = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward,
