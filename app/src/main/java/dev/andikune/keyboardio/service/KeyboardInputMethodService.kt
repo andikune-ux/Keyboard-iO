@@ -481,6 +481,7 @@ class KeyboardInputMethodService : InputMethodService(),
             val deleted = textBefore.substring(start)
             if (ic.deleteSurroundingTextInCodePoints(deleteCount, 0)) {
                 removeFromSessionSuffix(deleted)
+                composingWordManuallyEdited = true
                 recordUndo(deleted, "")
             }
         }
