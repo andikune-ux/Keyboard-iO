@@ -66,4 +66,11 @@ class EditorTextContextSynchronizerTest {
         assertFalse(context.canReplaceCurrentWord)
         assertEquals("", context.composingWord)
     }
+    @Test fun autocorrectionAddsSpaceOnlyAtDocumentEnd() {
+        assertEquals("the ", EditorTextContextSynchronizer.autoCorrectionCommitText("the", ""))
+        assertEquals("the", EditorTextContextSynchronizer.autoCorrectionCommitText("the", " "))
+        assertEquals("the", EditorTextContextSynchronizer.autoCorrectionCommitText("the", ", lanjut"))
+        assertEquals("the", EditorTextContextSynchronizer.autoCorrectionCommitText("the", "."))
+    }
 }
+
