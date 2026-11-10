@@ -718,6 +718,8 @@ private fun CustomizationTab(
     ) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
+                var pendingTempFile: File? = null
+                var pendingDestinationFile: File? = null
                 runCatching {
                     val mimeType = context.contentResolver.getType(uri)
                         ?.substringBefore(';')
@@ -731,9 +733,14 @@ private fun CustomizationTab(
                             "Format wallpaper tidak dikenali. Pilih file gambar atau video yang didukung."
                         )
                     }
-                    val fileName = if (isVideo) "custom_keyboard_bg.mp4" else "custom_keyboard_bg.jpg"
+                    // Unique path forces Compose to reload replaced wallpaper media.
+                    val fileId = java.util.UUID.randomUUID().toString()
+                    val extension = if (isVideo) "mp4" else "img"
+                    val fileName = "custom_keyboard_bg_$fileId.$extension"
                     val destFile = File(context.filesDir, fileName)
                     val tempFile = File(context.filesDir, "$fileName.tmp")
+                    pendingTempFile = tempFile
+                    pendingDestinationFile = destFile
                     val copied = context.contentResolver.openInputStream(uri)?.use { input ->
                         FileOutputStream(tempFile).use { output ->
                             input.copyTo(output)
@@ -755,9 +762,11 @@ private fun CustomizationTab(
                         opacity = 1f,
                         dim = 0f
                     )
+                    pendingTempFile = null
+                    pendingDestinationFile = null
                 }.onFailure {
-                    File(context.filesDir, "custom_keyboard_bg.jpg.tmp").delete()
-                    File(context.filesDir, "custom_keyboard_bg.mp4.tmp").delete()
+                    pendingTempFile?.delete()
+                    pendingDestinationFile?.delete()
                     Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
                 }
             }
