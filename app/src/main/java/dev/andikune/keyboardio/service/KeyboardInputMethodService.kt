@@ -41,6 +41,7 @@ import dev.andikune.keyboardio.data.EditorTextContextSynchronizer
 import dev.andikune.keyboardio.data.EditorInputConnectionContextReader
 import dev.andikune.keyboardio.data.EditorInputTypePolicy
 import dev.andikune.keyboardio.data.EditorWordReplacement
+import dev.andikune.keyboardio.data.EditorAutoCorrectionPolicy
 import dev.andikune.keyboardio.data.UnicodeBackspaceEngine
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -381,10 +382,15 @@ class KeyboardInputMethodService : InputMethodService(),
             }
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
-                if (preferences.isAutoCorrectionEnabled() && editorState.value.isAutoCorrectionAllowed &&
-                    !composingWordManuallyEdited &&
-                    editorContext.isReliable && !editorContext.hasSelection &&
-                    editorContext.cursorAtWordEnd && currentWord.length >= 3) {
+                if (EditorAutoCorrectionPolicy.shouldCorrect(
+                        isEnabled = preferences.isAutoCorrectionEnabled(),
+                        editorAllowsCorrection = editorState.value.isAutoCorrectionAllowed,
+                        wasManuallyEdited = composingWordManuallyEdited,
+                        contextIsReliable = editorContext.isReliable,
+                        hasSelection = editorContext.hasSelection,
+                        cursorAtWordEnd = editorContext.cursorAtWordEnd,
+                        word = currentWord
+                    )) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Never replace a word if the live editor no longer matches the
