@@ -262,7 +262,7 @@ private fun SessionRow(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "$startTime – $endTime",
+                    text = "Buka $startTime • Tutup $endTime",
                     color = TextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
