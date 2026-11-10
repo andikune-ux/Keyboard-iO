@@ -91,8 +91,17 @@ class TypingActivityStore(context: Context) {
 
     private fun saveActiveDraft(startedAt: Long, text: String) {
         val now = System.currentTimeMillis()
+        val previousCreatedAt = prefs.getString(KEY_ACTIVE_DRAFT, null)?.let { raw ->
+            runCatching {
+                val previous = JSONObject(raw)
+                if (previous.optLong("startedAt", -1L) == startedAt) {
+                    previous.optLong("createdAt", startedAt)
+                } else null
+            }.getOrNull()
+        }
         val draft = JSONObject().apply {
             put("startedAt", startedAt)
+            put("createdAt", previousCreatedAt ?: now)
             put("updatedAt", now)
             put("text", text)
         }
@@ -135,12 +144,12 @@ class TypingActivityStore(context: Context) {
             runCatching {
                 val draft = JSONObject(value)
                 val startedAt = draft.optLong("startedAt", now)
-                val updatedAt = draft.optLong("updatedAt", startedAt)
+                val createdAt = draft.optLong("createdAt", startedAt)
                 val text = draft.optString("text", "")
                 TypingSessionRecord(
                     startedAt = startedAt,
                     endedAt = now,
-                    createdAt = now,
+                    createdAt = createdAt,
                     text = text,
                     charCount = text.codePointCount(0, text.length),
                     wordCount = SESSION_WORD_PATTERN.findAll(text).count(),
@@ -152,11 +161,12 @@ class TypingActivityStore(context: Context) {
         val combined = if (recoveredDraft != null) parsed + recoveredDraft else parsed
         val valid = prune(combined, now)
         val shouldMigrate = raw.isNotBlank() && !raw.trimStart().startsWith("[")
-        val hadRecoverableDraft = recoveredDraft != null
-        if (valid.size != parsed.size || shouldMigrate || hadRecoverableDraft) {
+        if (valid.size != parsed.size || shouldMigrate || recoveredDraft != null || draftRaw != null) {
             saveSessions(valid)
         }
-        if (hadRecoverableDraft || (draftRaw != null && recoveredDraft == null && runCatching { JSONObject(draftRaw) }.isSuccess)) {
+        // A draft is either recovered into the durable session list or discarded
+        // (expired/corrupt). Never leave a stale draft to be replayed on later starts.
+        if (draftRaw != null) {
             prefs.edit().remove(KEY_ACTIVE_DRAFT).apply()
         }
         return valid

@@ -53,6 +53,45 @@ class TypingActivityStoreTest {
     }
 
     @Test
+    fun interruptedDraftExpiresTwentyFourHoursAfterItsFirstSave() {
+        val now = System.currentTimeMillis()
+        val expiredDraft = JSONObject().apply {
+            put("startedAt", now - 26L * 60 * 60 * 1000)
+            put("createdAt", now - 25L * 60 * 60 * 1000)
+            // A recent update must not extend the original 24-hour retention window.
+            put("updatedAt", now - 1_000L)
+            put("text", "stale interrupted text")
+        }
+        context.getSharedPreferences("keyboard_io_typing_activity", Context.MODE_PRIVATE)
+            .edit().putString("typing_active_session_draft", expiredDraft.toString()).commit()
+
+        val store = TypingActivityStore(context)
+        assertTrue(store.getStats().sessions.isEmpty())
+        assertTrue(
+            context.getSharedPreferences("keyboard_io_typing_activity", Context.MODE_PRIVATE)
+                .getString("typing_active_session_draft", null) == null
+        )
+    }
+
+    @Test
+    fun recoveredDraftKeepsItsOriginalCreationTime() {
+        val now = System.currentTimeMillis()
+        val createdAt = now - 60_000L
+        val draft = JSONObject().apply {
+            put("startedAt", now - 90_000L)
+            put("createdAt", createdAt)
+            put("updatedAt", now - 1_000L)
+            put("text", "recoverable text")
+        }
+        context.getSharedPreferences("keyboard_io_typing_activity", Context.MODE_PRIVATE)
+            .edit().putString("typing_active_session_draft", draft.toString()).commit()
+
+        val restored = TypingActivityStore(context).getStats().sessions.single()
+        assertEquals("recoverable text", restored.text)
+        assertEquals(createdAt, restored.createdAt)
+    }
+
+    @Test
     fun sessionExpiresTwentyFourHoursAfterItWasSaved() {
         val now = System.currentTimeMillis()
         val expired = JSONObject().apply {
