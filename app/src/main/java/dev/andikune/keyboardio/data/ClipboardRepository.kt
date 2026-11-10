@@ -47,15 +47,22 @@ class ClipboardRepository(context: Context) {
                     )
                 )
             }
-            // Never expire, filter, deduplicate, or cap clipboard history.
-            // Preserve every copy event until the user explicitly deletes it.
-            _items.value = list.sortedWith(
+            // Repair duplicate legacy IDs without discarding any history entries.
+            // Never expire, filter, deduplicate by text, or cap clipboard history.
+            val highestExistingId = list.maxOfOrNull { it.id } ?: 0L
+            var generatedId = maxOf(System.currentTimeMillis(), highestExistingId + 1L)
+            val usedIds = mutableSetOf<Long>()
+            val withUniqueIds = list.map { item ->
+                if (usedIds.add(item.id)) {
+                    item
+                } else {
+                    item.copy(id = generatedId++).also { usedIds.add(it.id) }
+                }
+            }
+            _items.value = withUniqueIds.sortedWith(
                 compareByDescending<ClipboardItem> { it.timestamp }.thenByDescending { it.id }
             )
-            nextItemId = maxOf(
-                System.currentTimeMillis(),
-                (_items.value.maxOfOrNull { it.id } ?: 0L) + 1L
-            )
+            nextItemId = generatedId
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()

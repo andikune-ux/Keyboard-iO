@@ -2,7 +2,6 @@ package dev.andikune.keyboardio.data
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import dev.andikune.keyboardio.model.ClipboardItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,6 +81,32 @@ class ClipboardRepositoryTest {
         repository.removeItem(pinned.id)
         assertTrue(repository.items.value.isEmpty())
         assertFalse(repository.items.value.any { it.id == removable.id })
+    }
+
+    @Test
+    fun repairsDuplicateLegacyIdsWithoutDroppingItems() {
+        val duplicatedId = 42L
+        val first = JSONObject().apply {
+            put("id", duplicatedId)
+            put("text", "first copy")
+            put("timestamp", 2L)
+            put("isPinned", false)
+        }
+        val second = JSONObject().apply {
+            put("id", duplicatedId)
+            put("text", "second copy")
+            put("timestamp", 1L)
+            put("isPinned", false)
+        }
+        val json = JSONArray().put(first).put(second).toString()
+        context.getSharedPreferences("keyboard_io_clipboard", Context.MODE_PRIVATE)
+            .edit().putString("clips_json", json).commit()
+
+        val repository = ClipboardRepository(context)
+        assertEquals(2, repository.items.value.size)
+        assertEquals(2, repository.items.value.map { it.id }.distinct().size)
+        assertTrue(repository.items.value.any { it.text == "first copy" })
+        assertTrue(repository.items.value.any { it.text == "second copy" })
     }
 
     @Test
