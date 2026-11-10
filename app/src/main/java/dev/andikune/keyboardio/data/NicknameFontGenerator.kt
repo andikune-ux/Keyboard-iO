@@ -265,7 +265,7 @@ object NicknameFontGenerator {
         NicknameStyle(
             id = "upside_down",
             name = "Upside Down",
-            previewSample = "Oı pɹɐoqʎǝʞ",
+            previewSample = "oᴉ pɹɐoqʎǝʞ",
             transform = { text ->
                 reverseCodePoints(
                     mapChars(
