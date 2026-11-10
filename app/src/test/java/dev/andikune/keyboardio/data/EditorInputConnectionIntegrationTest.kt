@@ -73,4 +73,18 @@ class EditorInputConnectionIntegrationTest {
 
         assertNull(EditorInputConnectionContextReader.read(connection))
     }
+
+    @Test fun editorConnectionExceptionsAreHandledAsUnavailableContext() {
+        val connection = Proxy.newProxyInstance(
+            InputConnection::class.java.classLoader,
+            arrayOf(InputConnection::class.java)
+        ) { _, method, _ ->
+            if (method.name == "getTextBeforeCursor") {
+                throw IllegalStateException("editor connection is no longer valid")
+            }
+            null
+        } as InputConnection
+
+        assertNull(EditorInputConnectionContextReader.read(connection))
+    }
 }
