@@ -719,8 +719,18 @@ private fun CustomizationTab(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 runCatching {
-                    val mimeType = context.contentResolver.getType(uri).orEmpty()
-                    val isVideo = mimeType.startsWith("video")
+                    val mimeType = context.contentResolver.getType(uri)
+                        ?.substringBefore(';')
+                        ?.trim()
+                        ?.lowercase(Locale.ROOT)
+                        .orEmpty()
+                    val isVideo = when {
+                        mimeType.startsWith("video/") -> true
+                        mimeType.startsWith("image/") -> false
+                        else -> throw IllegalArgumentException(
+                            "Format wallpaper tidak dikenali. Pilih file gambar atau video yang didukung."
+                        )
+                    }
                     val fileName = if (isVideo) "custom_keyboard_bg.mp4" else "custom_keyboard_bg.jpg"
                     val destFile = File(context.filesDir, fileName)
                     val tempFile = File(context.filesDir, "$fileName.tmp")
