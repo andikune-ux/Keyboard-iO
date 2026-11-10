@@ -23,6 +23,9 @@ object EditorTextContextSynchronizer {
         }
     }
 
+    fun autoCorrectionCommitText(correctedWord: String, textAfterWord: String): String =
+        correctedWord + if (textAfterWord.isEmpty()) " " else ""
+
     fun resolve(before: String?, after: String?, hasSelection: Boolean = false): Snapshot {
         if (hasSelection) return EMPTY_SELECTION
         val left = before.orEmpty()
