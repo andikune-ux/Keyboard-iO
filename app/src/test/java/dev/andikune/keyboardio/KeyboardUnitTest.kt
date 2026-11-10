@@ -237,5 +237,32 @@ class KeyboardUnitTest {
             "ɔqɐ",
             dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("ABC", "upside_down")
         )
+        assertEquals(
+            "🄺🄴🅈🄱🄾🄰🅁🄳",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Keyboard", "squared")
+        )
+        assertEquals(
+            "🅺🅴🆈🅱🅾🅰🆁🅳",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Keyboard", "negative_squared")
+        )
+        assertEquals(
+            "ⓐⓑ",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("Ab", "parenthesized")
+        )
+        assertEquals(
+            "🇦🇧",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("AB", "regional_indicator")
+        )
+
+        // Upside-down conversion must reverse visible clusters, not detach combining marks.
+        assertEquals(
+            "qɐ\u0301",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("A\u0301B", "upside_down")
+        )
+        val familyEmoji = "👨‍👩‍👧‍👦"
+        assertEquals(
+            "ɐ$familyEmoji",
+            dev.andikune.keyboardio.data.NicknameFontGenerator.convertText("$familyEmoji" + "A", "upside_down")
+        )
     }
 }

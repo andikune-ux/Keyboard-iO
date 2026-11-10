@@ -34,13 +34,53 @@ object NicknameFontGenerator {
             for (ch in input) append(mapping[ch] ?: ch.toString())
         }
 
-    private fun reverseCodePoints(input: String): String = buildString {
-        var offset = input.length
-        while (offset > 0) {
-            val codePoint = Character.codePointBefore(input, offset)
-            appendCodePoint(codePoint)
-            offset -= Character.charCount(codePoint)
+    /**
+     * Reverse visible text units without separating combining marks, variation selectors,
+     * emoji modifiers, ZWJ sequences, or regional-indicator flag pairs.
+     */
+    private fun reverseGraphemeSafe(input: String): String {
+        if (input.isEmpty()) return input
+        val clusters = mutableListOf<String>()
+        val current = StringBuilder()
+        var previousWasJoiner = false
+        var regionalIndicatorsInCluster = 0
+
+        var offset = 0
+        while (offset < input.length) {
+            val codePoint = input.codePointAt(offset)
+            val type = Character.getType(codePoint)
+            val isMark = type == Character.NON_SPACING_MARK.toInt() ||
+                type == Character.COMBINING_SPACING_MARK.toInt() ||
+                type == Character.ENCLOSING_MARK.toInt()
+            val isVariationSelector = codePoint in 0xFE00..0xFE0F ||
+                codePoint in 0xE0100..0xE01EF
+            val isEmojiModifier = codePoint in 0x1F3FB..0x1F3FF
+            val isTagCharacter = codePoint in 0xE0020..0xE007F
+            val isRegionalIndicator = codePoint in 0x1F1E6..0x1F1FF
+            val joinsCurrent = current.isNotEmpty() && (
+                isMark || isVariationSelector || isEmojiModifier || isTagCharacter ||
+                    codePoint == 0x200D || previousWasJoiner ||
+                    (isRegionalIndicator && regionalIndicatorsInCluster % 2 == 1)
+                )
+
+            if (!joinsCurrent && current.isNotEmpty()) {
+                clusters += current.toString()
+                current.setLength(0)
+                regionalIndicatorsInCluster = 0
+            }
+
+            current.appendCodePoint(codePoint)
+            if (isRegionalIndicator) regionalIndicatorsInCluster++ else if (codePoint != 0x200D &&
+                !isMark && !isVariationSelector && !isEmojiModifier && !isTagCharacter
+            ) {
+                regionalIndicatorsInCluster = 0
+            }
+            previousWasJoiner = codePoint == 0x200D
+            offset += Character.charCount(codePoint)
         }
+
+        if (current.isNotEmpty()) clusters += current.toString()
+        return clusters.asReversed().joinToString(separator = "")
     }
 
     val STYLES = listOf(
@@ -246,7 +286,7 @@ object NicknameFontGenerator {
                 mapChars(
                     text,
                     "🄰🄱🄲🄳🄴🄵🄶🄷🄸🄹🄺🄻🄼🄽🄾🄿🅀🅁🅂🅃🅄🅅🅆🅇🅈🅉",
-                    ""
+                    "🄰🄱🄲🄳🄴🄵🄶🄷🄸🄹🄺🄻🄼🄽🄾🄿🅀🅁🅂🅃🅄🅅🅆🅇🅈🅉"
                 )
             }
         ),
@@ -258,7 +298,7 @@ object NicknameFontGenerator {
                 mapChars(
                     text,
                     "🅰🅱🅲🅳🅴🅵🅶🅷🅸🅹🅺🅻🅼🅽🅾🅿🆀🆁🆂🆃🆄🆅🆆🆇🆈🆉",
-                    ""
+                    "🅰🅱🅲🅳🅴🅵🅶🅷🅸🅹🅺🅻🅼🅽🅾🅿🆀🆁🆂🆃🆄🆅🆆🆇🆈🆉"
                 )
             }
         ),
@@ -267,7 +307,7 @@ object NicknameFontGenerator {
             name = "Upside Down",
             previewSample = "oᴉ pɹɐoqʎǝʞ",
             transform = { text ->
-                reverseCodePoints(
+                reverseGraphemeSafe(
                     mapChars(
                         text,
                         "ɐqɔpǝɟƃɥᴉɾʞןɯuodbɹsʇnʌʍxʎz",
@@ -311,6 +351,26 @@ object NicknameFontGenerator {
                         '5' to "₅", '6' to "₆", '7' to "₇", '8' to "₈", '9' to "₉"
                     )
                 )
+            }
+        ),
+        NicknameStyle(
+            id = "parenthesized",
+            name = "Parenthesized",
+            previewSample = "ⓚⓔⓨⓑⓞⓐⓡⓓ",
+            transform = { text ->
+                val alphabet = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ"
+                mapChars(text, alphabet, alphabet)
+            }
+        ),
+        NicknameStyle(
+            id = "regional_indicator",
+            name = "Regional Indicator",
+            previewSample = "🇰🇪🇾🇧🇴🇦🇷🇩",
+            transform = { text ->
+                val alphabet = buildString {
+                    for (index in 0 until 26) appendCodePoint(0x1F1E6 + index)
+                }
+                mapChars(text, alphabet, alphabet)
             }
         ),
         NicknameStyle(
