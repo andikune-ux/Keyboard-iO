@@ -466,6 +466,9 @@ class KeyboardInputMethodService : InputMethodService(),
         provideFeedback()
         val ic = currentInputConnection ?: return
 
+        // commitText replaces an active selection. Preserve that selection in the
+        // inverse operation so Undo restores the user's original highlighted text.
+        val selectedBefore = ic.getSelectedText(0)?.toString().orEmpty()
         var toCommit = text
         // Smart Auto-Capitalization: Capitalize start of sentence if enabled
         if (preferences.autoCapitalize.value &&
@@ -498,7 +501,7 @@ class KeyboardInputMethodService : InputMethodService(),
         if (inserted.isNotEmpty()) {
             val insertedText = inserted.toString()
             appendToSession(insertedText)
-            recordUndo("", insertedText)
+            recordUndo(selectedBefore, insertedText)
         }
 
         // The editor's actual cursor/text is the source of truth; this also handles
