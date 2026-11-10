@@ -722,7 +722,7 @@ fun KeyboardScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(horizontal = 2.dp)
-                                .pointerInput(isSwipeTypingEnabled, layoutMode, baseKeyHeight) {
+                                .pointerInput(isSwipeTypingEnabled, layoutMode, baseKeyHeight, learnedWords, oneHandedMode, onSuggestionPicked) {
                                     if (isSwipeTypingEnabled && layoutMode in setOf(KeyboardLayoutMode.QWERTY_LOWER, KeyboardLayoutMode.QWERTY_UPPER, KeyboardLayoutMode.CAPS_LOCK)) {
                                         awaitEachGesture {
                                             val down = awaitPointerEventScope {
@@ -754,7 +754,8 @@ fun KeyboardScreen(
                                                 if (letter != null && pathLetters.lastOrNull() != letter) {
                                                     pathLetters.append(letter)
                                                 }
-                                                if (swipeTrail.size < 100) swipeTrail.add(position)
+                                                val drawOffset = if (oneHandedMode == OneHandedMode.RIGHT) 54.dp.toPx() else 0f
+                                                if (swipeTrail.size < 100) swipeTrail.add(Offset(position.x + drawOffset, position.y))
                                             }
                                             swipeTrail.clear()
                                             collectKey(down.position)

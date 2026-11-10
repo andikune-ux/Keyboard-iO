@@ -194,7 +194,16 @@ class KeyboardInputMethodService : InputMethodService(),
                 variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
                 (classType == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
 
-        val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE || classType == InputType.TYPE_CLASS_NUMBER
+        val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE ||
+                classType == InputType.TYPE_CLASS_NUMBER || classType == InputType.TYPE_CLASS_DATETIME
+        val isAutoCorrectionAllowed = classType == InputType.TYPE_CLASS_TEXT &&
+                variation != InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS &&
+                variation != InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
+                variation != InputType.TYPE_TEXT_VARIATION_URI &&
+                variation != InputType.TYPE_TEXT_VARIATION_PASSWORD &&
+                variation != InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD &&
+                variation != InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD &&
+                (inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) == 0
 
         val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
                 ((inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0)
@@ -217,6 +226,7 @@ class KeyboardInputMethodService : InputMethodService(),
         editorState.value = KeyboardEditorState(
             isPassword = isPassword,
             isNumberOnly = isNumberOnly,
+            isAutoCorrectionAllowed = isAutoCorrectionAllowed && !isPassword,
             enterAction = enterAction
         )
         composingWord.value = ""
@@ -310,7 +320,7 @@ class KeyboardInputMethodService : InputMethodService(),
             }
             is KeyAction.Space -> {
                 val currentWord = composingWord.value
-                if (preferences.isAutoCorrectionEnabled() && currentWord.length >= 3) {
+                if (preferences.isAutoCorrectionEnabled() && editorState.value.isAutoCorrectionAllowed && currentWord.length >= 3) {
                     val autoFixed = WordSuggester.findAutoCorrection(currentWord, userWordHistory.words.value)
                     if (autoFixed != null && autoFixed.isNotEmpty()) {
                         // Replace current typo with corrected word

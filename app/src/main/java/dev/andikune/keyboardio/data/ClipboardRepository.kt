@@ -50,7 +50,13 @@ class ClipboardRepository(context: Context) {
                 )
             }
             val now = System.currentTimeMillis()
-            val retained = list.filter { it.isPinned || now - it.timestamp <= RETENTION_MS }
+            val seededExamples = setOf(
+                "Keyboard iO - Next-Gen RGB Typing",
+                "https://github.com/andikune",
+                "dev.andikune.keyboardio"
+            )
+            val retained = list.filterNot { it.text in seededExamples }
+                .filter { it.isPinned || now - it.timestamp <= RETENTION_MS }
                 .sortedByDescending { it.timestamp }
             _items.value = retained
             if (retained.size != list.size) saveItems(retained)
@@ -92,7 +98,7 @@ class ClipboardRepository(context: Context) {
         // memiliki lebih dari MAX_ITEMS item pinned.
         val unpinnedLimit = (MAX_ITEMS - pinned.size).coerceAtLeast(0)
         val unpinned = current.filterNot { it.isPinned }.take(unpinnedLimit)
-        val updated = (pinned + unpinned).sortedByDescending { it.timestamp }
+        val updated = pinned.sortedByDescending { it.timestamp } + unpinned.sortedByDescending { it.timestamp }
         _items.value = updated
         saveItems(updated)
     }

@@ -61,6 +61,7 @@ enum class EnterActionType(val displayLabel: String) {
 data class KeyboardEditorState(
     val isPassword: Boolean = false,
     val isNumberOnly: Boolean = false,
+    val isAutoCorrectionAllowed: Boolean = true,
     val enterAction: EnterActionType = EnterActionType.RETURN
 )
 
