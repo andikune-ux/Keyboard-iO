@@ -77,6 +77,8 @@ class KeyboardInputMethodService : InputMethodService(),
     val composingWord = MutableStateFlow("")
     val previousWord = MutableStateFlow("")
     private var editorContext = EditorTextContextSynchronizer.Snapshot.EMPTY
+    // Backspace/delete marks the active token as user-edited; don't auto-correct it on Space.
+    private var composingWordManuallyEdited = false
 
     private var audioManager: AudioManager? = null
     private var vibrator: Vibrator? = null
