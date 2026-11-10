@@ -102,6 +102,11 @@ class KeyboardUnitTest {
         // Exact user text is always preserved as the first suggestion.
         assertEquals("kam", WordSuggester.getWordCompletionsAndCorrections("kam").first())
         assertTrue(WordSuggester.getNextWordPredictions("").isEmpty())
+        val personalPredictions = WordSuggester.getNextWordPredictions(
+            "saya",
+            learnedBigrams = mapOf("saya" to mapOf("ngopi" to 12, "makan" to 2))
+        )
+        assertEquals("ngopi", personalPredictions.first())
         val corrected = WordSuggester.findAutoCorrection("kmu")
         assertEquals("kamu", corrected)
         assertEquals(null, WordSuggester.findAutoCorrection("keyboard", mapOf("keyboard" to 20)))

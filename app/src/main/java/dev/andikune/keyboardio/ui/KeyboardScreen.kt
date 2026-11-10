@@ -140,6 +140,7 @@ fun KeyboardScreen(
     composingWordFlow: StateFlow<String>,
     previousWordFlow: StateFlow<String>? = null,
     userWordHistoryFlow: StateFlow<Map<String, Int>>? = null,
+    userWordBigramsFlow: StateFlow<Map<String, Map<String, Int>>>? = null,
     typingActivityStore: TypingActivityStore? = null,
     voiceInputManager: VoiceInputManager? = null,
     audioFeedback: KeyboardAudioFeedback? = null,
@@ -172,6 +173,7 @@ fun KeyboardScreen(
     val composingWord by composingWordFlow.collectAsState()
     val previousWord by (previousWordFlow?.collectAsState() ?: remember { mutableStateOf("") })
     val learnedWords by (userWordHistoryFlow?.collectAsState() ?: remember { mutableStateOf(emptyMap()) })
+    val learnedBigrams by (userWordBigramsFlow?.collectAsState() ?: remember { mutableStateOf(emptyMap()) })
 
     // Active voice recognition state if available
     val isVoiceListening by (voiceInputManager?.isListening?.collectAsState() ?: remember { mutableStateOf(false) })
@@ -194,13 +196,13 @@ fun KeyboardScreen(
         composingWord
     }
 
-    val suggestions = remember(currentWordForSuggestions, previousWord, learnedWords, editorState.isPassword, isTranslateMode) {
+    val suggestions = remember(currentWordForSuggestions, previousWord, learnedWords, learnedBigrams, editorState.isPassword, isTranslateMode) {
         if (editorState.isPassword) {
             emptyList()
         } else if (currentWordForSuggestions.trim().isNotEmpty()) {
             WordSuggester.getWordCompletionsAndCorrections(currentWordForSuggestions, learnedWords = learnedWords)
         } else if (previousWord.isNotBlank() && !editorState.isNumberOnly) {
-            WordSuggester.getNextWordPredictions(previousWord, learnedWords = learnedWords)
+            WordSuggester.getNextWordPredictions(previousWord, learnedWords = learnedWords, learnedBigrams = learnedBigrams)
         } else {
             emptyList()
         }

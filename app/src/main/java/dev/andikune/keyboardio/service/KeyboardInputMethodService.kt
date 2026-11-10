@@ -99,6 +99,14 @@ class KeyboardInputMethodService : InputMethodService(),
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         audioFeedback = KeyboardAudioFeedback(applicationContext)
         voiceInputManager = VoiceInputManager(applicationContext) { spokenText ->
+            var previous = previousWord.value
+            spokenText.split(Regex("\\s+"))
+                .map { token -> token.trim().filter { it.isLetter() || it == '\'' } }
+                .filter { it.length >= 2 }
+                .forEach { token ->
+                    userWordHistory.learn(token, previous)
+                    previous = token
+                }
             commitText("$spokenText ")
         }
 
@@ -244,6 +252,23 @@ class KeyboardInputMethodService : InputMethodService(),
         }
     }
 
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        if (newSelStart == newSelEnd) {
+            syncComposingWordFromEditor()
+        } else {
+            composingWord.value = ""
+            updatePreviousWord()
+        }
+    }
+
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
@@ -334,14 +359,14 @@ class KeyboardInputMethodService : InputMethodService(),
                         val replacement = "$autoFixed "
                         ic.commitText(replacement, 1)
                         recordUndo(currentWord, replacement)
-                        userWordHistory.learn(autoFixed)
+                        userWordHistory.learn(autoFixed, previousWord.value)
                         composingWord.value = ""
                         previousWord.value = autoFixed.lowercase(Locale.ROOT)
                         return
                     }
                 }
                 if (currentWord.isNotBlank()) {
-                    userWordHistory.learn(currentWord)
+                    userWordHistory.learn(currentWord, previousWord.value)
                 }
                 commitText(" ")
                 composingWord.value = ""
@@ -454,7 +479,7 @@ class KeyboardInputMethodService : InputMethodService(),
         val inserted = "$cleanWord "
         ic.commitText(inserted, 1)
         recordUndo(currentPrefix, inserted)
-        userWordHistory.learn(cleanWord)
+        userWordHistory.learn(cleanWord, previousWord.value)
 
         sessionCharCount += cleanWord.length + 1
         sessionWordCount++
@@ -482,8 +507,15 @@ class KeyboardInputMethodService : InputMethodService(),
     private fun syncComposingWordFromEditor() {
         val ic = currentInputConnection ?: return
         val before = ic.getTextBeforeCursor(80, 0)?.toString().orEmpty()
-        composingWord.value = before.takeLastWhile { it.isLetter() || it == '\'' }
-        updatePreviousWord()
+        val current = before.takeLastWhile { it.isLetter() || it == '\'' }
+        composingWord.value = current
+        val contextBeforeCurrent = if (current.isEmpty()) before else before.dropLast(current.length)
+        previousWord.value = extractLastWord(contextBeforeCurrent)
+    }
+
+    private fun extractLastWord(text: String): String {
+        val token = text.trimEnd().substringAfterLast(' ').substringAfterLast('\\n', "")
+        return token.takeLastWhile { it.isLetter() || it == '\'' }.lowercase(Locale.ROOT)
     }
 
     private fun performUndo() {

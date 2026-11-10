@@ -250,16 +250,20 @@ object WordSuggester {
     fun getNextWordPredictions(
         previousWord: String,
         maxCount: Int = 3,
-        learnedWords: Map<String, Int> = emptyMap()
+        learnedWords: Map<String, Int> = emptyMap(),
+        learnedBigrams: Map<String, Map<String, Int>> = emptyMap()
     ): List<String> {
         val cleanPrev = previousWord.trim().lowercase(Locale.ROOT)
         if (cleanPrev.isEmpty() || maxCount <= 0) return emptyList()
+        val personal = learnedBigrams[cleanPrev].orEmpty().entries
+            .sortedByDescending { it.value }
+            .map { it.key }
         val contextual = BIGRAM_PREDICTIONS[cleanPrev].orEmpty()
-        if (contextual.isEmpty()) return emptyList()
-        return contextual.distinct()
+        return (personal + contextual)
+            .distinct()
             .sortedByDescending { candidate ->
                 val token = candidate.substringBefore(' ').lowercase(Locale.ROOT)
-                learnedWords[token] ?: 0
+                (learnedBigrams[cleanPrev]?.get(token) ?: 0) * 1000 + (learnedWords[token] ?: 0)
             }
             .take(maxCount)
     }
