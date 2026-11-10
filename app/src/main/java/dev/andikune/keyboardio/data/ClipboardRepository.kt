@@ -20,6 +20,7 @@ class ClipboardRepository(context: Context) {
 
     private val _items = MutableStateFlow<List<ClipboardItem>>(emptyList())
     val items: StateFlow<List<ClipboardItem>> = _items.asStateFlow()
+    private var nextItemId: Long = System.currentTimeMillis()
 
     init {
         loadItems()
@@ -46,9 +47,15 @@ class ClipboardRepository(context: Context) {
                     )
                 )
             }
-            // Clipboard history is user-owned data: never expire, filter, or cap it.
-            // Only explicit user actions (delete / clear) may remove saved entries.
-            _items.value = list.sortedByDescending { it.timestamp }
+            // Never expire, filter, deduplicate, or cap clipboard history.
+            // Preserve every copy event until the user explicitly deletes it.
+            _items.value = list.sortedWith(
+                compareByDescending<ClipboardItem> { it.timestamp }.thenByDescending { it.id }
+            )
+            nextItemId = maxOf(
+                System.currentTimeMillis(),
+                (_items.value.maxOfOrNull { it.id } ?: 0L) + 1L
+            )
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()
@@ -73,18 +80,15 @@ class ClipboardRepository(context: Context) {
     @Synchronized
     fun addClip(text: String) {
         if (text.isBlank()) return
-        val now = System.currentTimeMillis()
-        val current = _items.value.toMutableList()
-        val existingIndex = current.indexOfFirst { it.text == text }
-        if (existingIndex >= 0) {
-            // Keep the existing history entry and move it to the top; no other
-            // clipboard item is removed or aged out.
-            val existing = current.removeAt(existingIndex)
-            current.add(0, existing.copy(timestamp = now))
-        } else {
-            current.add(0, ClipboardItem(text = text, timestamp = now))
-        }
-        val updated = current.sortedByDescending { it.timestamp }
+
+        // Each copy is a separate history event, even when the text is identical.
+        // IDs are monotonic so LazyColumn keys remain unique for rapid consecutive copies.
+        val item = ClipboardItem(
+            id = nextItemId++,
+            text = text,
+            timestamp = System.currentTimeMillis()
+        )
+        val updated = listOf(item) + _items.value
         _items.value = updated
         saveItems(updated)
     }
@@ -105,6 +109,7 @@ class ClipboardRepository(context: Context) {
         saveItems(updated)
     }
 
+    /** Explicit user action: remove only unpinned entries; pinned entries remain. */
     @Synchronized
     fun clearUnpinned() {
         val updated = _items.value.filter { it.isPinned }

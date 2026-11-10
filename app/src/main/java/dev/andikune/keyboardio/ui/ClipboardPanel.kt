@@ -25,9 +25,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +60,27 @@ fun ClipboardPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showClearConfirmation by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    if (showClearConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmation = false },
+            title = { Text("Hapus riwayat clipboard?") },
+            text = {
+                Text("Semua item yang tidak disematkan akan dihapus. Item yang disematkan tetap tersimpan. Tindakan ini tidak dapat dibatalkan.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onClearAll()
+                    showClearConfirmation = false
+                }) { Text("Hapus") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmation = false }) { Text("Batal") }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -92,10 +115,10 @@ fun ClipboardPanel(
             }
 
             if (items.any { !it.isPinned }) {
-                IconButton(onClick = onClearAll, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { showClearConfirmation = true }, modifier = Modifier.size(32.dp)) {
                     Icon(
                         imageVector = Icons.Default.ClearAll,
-                        contentDescription = "Hapus Riwayat",
+                        contentDescription = "Hapus riwayat yang tidak disematkan",
                         tint = TextSecondary
                     )
                 }
