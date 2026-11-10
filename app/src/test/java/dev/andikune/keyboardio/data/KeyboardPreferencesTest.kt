@@ -88,6 +88,20 @@ class KeyboardPreferencesTest {
 
 
     @Test
+    fun preservesVersionTwoWallpaperValuesThatMayBeUserCustomized() {
+        context.getSharedPreferences("keyboard_io_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("custom_bg_settings_version", 2)
+            .putFloat("custom_bg_opacity", 0.92f)
+            .putFloat("custom_bg_dim", 0.10f)
+            .commit()
+
+        val preferences = KeyboardPreferences(context)
+        assertEquals(0.92f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0.10f, preferences.customBgDim.value, 0.001f)
+    }
+
+    @Test
     fun wallpaperChangesFromAnotherPreferencesInstanceAreObserved() {
         val keyboardPreferences = KeyboardPreferences(context)
         val settingsPreferences = KeyboardPreferences(context)
