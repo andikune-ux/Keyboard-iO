@@ -75,6 +75,9 @@ class ClipboardRepository internal constructor(context: Context) {
                 compareByDescending<ClipboardItem> { it.timestamp }.thenByDescending { it.id }
             )
             nextItemId = generatedId
+            if (withUniqueIds.map { it.id } != list.map { it.id }) {
+                saveItems(_items.value)
+            }
         } catch (exception: Exception) {
             Log.e(TAG, "Gagal membaca clipboard tersimpan; memakai daftar kosong", exception)
             _items.value = emptyList()

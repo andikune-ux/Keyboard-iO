@@ -118,6 +118,9 @@ class ClipboardRepositoryTest {
         assertEquals(2, repository.items.value.map { it.id }.distinct().size)
         assertTrue(repository.items.value.any { it.text == "first copy" })
         assertTrue(repository.items.value.any { it.text == "second copy" })
+
+        val restored = ClipboardRepository(context)
+        assertEquals(2, restored.items.value.map { it.id }.distinct().size)
     }
 
     @Test
