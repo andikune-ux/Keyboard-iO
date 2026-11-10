@@ -233,7 +233,7 @@ class KeyboardPreferences(context: Context) {
             .apply()
         _customBgType.value = type
         _customBgPath.value = path
-        _customBgOpacity.value = opacity.coerceIn(0.1f, 1f)
+        _customBgOpacity.value = opacity.coerceIn(0f, 1f)
         _customBgDim.value = dim.coerceIn(0f, 0.75f)
     }
 

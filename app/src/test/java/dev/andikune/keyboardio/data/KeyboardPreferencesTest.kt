@@ -86,4 +86,14 @@ class KeyboardPreferencesTest {
         assertEquals(0f, preferences.customBgDim.value, 0.001f)
     }
 
+
+    @Test
+    fun newBackgroundKeepsFullyTransparentOpacityInStateAndStorage() {
+        val preferences = KeyboardPreferences(context)
+        preferences.setCustomBackground(type = "IMAGE", path = "/tmp/wallpaper.jpg", opacity = 0f)
+
+        assertEquals(0f, preferences.customBgOpacity.value, 0.001f)
+        assertEquals(0f, KeyboardPreferences(context).customBgOpacity.value, 0.001f)
+    }
+
 }
