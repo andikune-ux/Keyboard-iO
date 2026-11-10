@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.zIndex
 import dev.andikune.keyboardio.model.KeyAction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -38,7 +39,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import dev.andikune.keyboardio.model.AuroraWave
 import dev.andikune.keyboardio.model.KeyItem
 import dev.andikune.keyboardio.model.RgbThemeStyle
@@ -69,9 +73,11 @@ fun KeyboardKey(
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onLongPress: (() -> Unit)? = null,
-    onSwipeLeft: (() -> Unit)? = null
+    onSwipeLeft: (() -> Unit)? = null,
+    onSmartDeleteWord: (() -> Unit)? = null
 ) {
     var isPressed by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     // Aurora wave intensity for this specific key, driven by animated waveProgress (0f -> 1f)
     val auroraIntensity by remember(activeWave, waveProgress) {
@@ -149,18 +155,45 @@ fun KeyboardKey(
                 shape = shape
             )
             .pointerInput(keyItem) {
+                val isBackspace = keyItem.action is KeyAction.Backspace || keyItem.primary == "⌫"
                 detectTapGestures(
                     onPress = {
                         isPressed = true
+                        val repeatJob = if (isBackspace) {
+                            coroutineScope.launch {
+                                onTap() // Immediate delete on touch down
+                                delay(380L) // Initial delay before continuous repeat (AOSP LatinIME / Gboard standard)
+                                var elapsed = 380L
+                                while (isActive) {
+                                    if (elapsed >= 1400L && onSmartDeleteWord != null) {
+                                        onSmartDeleteWord() // Accelerate to word/chunk deletion after long hold
+                                        delay(130L)
+                                        elapsed += 130L
+                                    } else {
+                                        onTap() // Fast smooth character deletion
+                                        delay(50L)
+                                        elapsed += 50L
+                                    }
+                                }
+                            }
+                        } else null
+
                         tryAwaitRelease()
+                        repeatJob?.cancel()
                         isPressed = false
                     },
-                    onTap = { onTap() },
-                    onLongPress = {
-                        if (onLongPress != null) {
-                            onLongPress()
-                        } else if (!keyItem.secondary.isNullOrEmpty()) {
+                    onTap = {
+                        if (!isBackspace) {
                             onTap()
+                        }
+                    },
+                    onLongPress = {
+                        if (!isBackspace) {
+                            if (onLongPress != null) {
+                                onLongPress()
+                            } else if (!keyItem.secondary.isNullOrEmpty()) {
+                                onTap()
+                            }
                         }
                     }
                 )

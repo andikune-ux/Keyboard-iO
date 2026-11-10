@@ -399,7 +399,7 @@ object WordSuggester {
         learnedWords: Map<String, Int> = emptyMap()
     ): String? {
         val trimmed = word.trim()
-        if (trimmed.length < 3 || trimmed.any { !it.isLetter() }) return null
+        if (trimmed.length < 3 || trimmed.any { !it.isLetter() } || trimmed.first().isUpperCase()) return null
         val lower = trimmed.lowercase(Locale.ROOT)
         val learned = learnedWords.keys.map { it.lowercase(Locale.ROOT) }.toSet()
         if (lower in VALID_WORDS_SET || lower in learned) return null

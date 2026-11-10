@@ -51,7 +51,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⇧",
-                weight = 1.3f,
+                weight = 1.5f,
                 action = KeyAction.Shift,
                 isActionKey = true,
                 row = 2,
@@ -74,7 +74,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.3f,
+                weight = 1.5f,
                 action = KeyAction.Backspace,
                 isActionKey = true,
                 row = 2,
@@ -86,16 +86,18 @@ object KeyboardLayouts {
 
     /**
      * Bottom row for QWERTY:
-     * Per user requirement:
-     * - Tombol emoji di baris bawah dihilangkan sepenuhnya
-     * - Posisi bekas tombol emoji digantikan oleh Tombol Koma ( , )
-     * - Spacebar menggunakan spacebarLabel kustom
+     * - ?123: 1.4f
+     * - Comma: 1.0f
+     * - Space: 5.0f
+     * - Period: 1.0f
+     * - Enter: 1.6f
+     * Total = 10.0f matching Rows 1, 2, and 3
      */
     fun getQwertyRow4(enterLabel: String = "↵", spacebarLabel: String = "␣"): List<KeyItem> {
         return listOf(
             KeyItem(
                 primary = "?123",
-                weight = 1.3f,
+                weight = 1.4f,
                 action = KeyAction.SwitchToSymbols,
                 isActionKey = true,
                 row = 3,
@@ -112,7 +114,7 @@ object KeyboardLayouts {
             KeyItem(
                 primary = spacebarLabel,
                 secondary = null,
-                weight = 4.4f,
+                weight = 5.0f,
                 action = KeyAction.Space,
                 row = 3,
                 col = 2
@@ -127,7 +129,7 @@ object KeyboardLayouts {
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.3f,
+                weight = 1.6f,
                 action = KeyAction.Enter,
                 isActionKey = true,
                 row = 3,
@@ -156,7 +158,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "=\\<",
-                weight = 1.3f,
+                weight = 1.5f,
                 action = KeyAction.SwitchToMoreSymbols,
                 isActionKey = true,
                 row = 2,
@@ -170,7 +172,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.3f,
+                weight = 1.5f,
                 action = KeyAction.Backspace,
                 isActionKey = true,
                 row = 2,
@@ -184,7 +186,7 @@ object KeyboardLayouts {
         return listOf(
             KeyItem(
                 primary = "ABC",
-                weight = 1.3f,
+                weight = 1.4f,
                 action = KeyAction.SwitchToLetters,
                 isActionKey = true,
                 row = 3,
@@ -199,7 +201,7 @@ object KeyboardLayouts {
             ),
             KeyItem(
                 primary = spacebarLabel,
-                weight = 4.4f,
+                weight = 5.0f,
                 action = KeyAction.Space,
                 row = 3,
                 col = 2
@@ -213,7 +215,7 @@ object KeyboardLayouts {
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.3f,
+                weight = 1.6f,
                 action = KeyAction.Enter,
                 isActionKey = true,
                 row = 3,
@@ -242,7 +244,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "?123",
-                weight = 1.3f,
+                weight = 1.4f,
                 action = KeyAction.SwitchToSymbols,
                 isActionKey = true,
                 row = 2,
@@ -256,7 +258,7 @@ object KeyboardLayouts {
         list.add(
             KeyItem(
                 primary = "⌫",
-                weight = 1.3f,
+                weight = 1.4f,
                 action = KeyAction.Backspace,
                 isActionKey = true,
                 row = 2,
@@ -270,7 +272,7 @@ object KeyboardLayouts {
         return listOf(
             KeyItem(
                 primary = "ABC",
-                weight = 1.3f,
+                weight = 1.4f,
                 action = KeyAction.SwitchToLetters,
                 isActionKey = true,
                 row = 3,
@@ -285,7 +287,7 @@ object KeyboardLayouts {
             ),
             KeyItem(
                 primary = spacebarLabel,
-                weight = 4.4f,
+                weight = 5.0f,
                 action = KeyAction.Space,
                 row = 3,
                 col = 2
@@ -299,7 +301,7 @@ object KeyboardLayouts {
             ),
             KeyItem(
                 primary = enterLabel,
-                weight = 1.3f,
+                weight = 1.6f,
                 action = KeyAction.Enter,
                 isActionKey = true,
                 row = 3,
