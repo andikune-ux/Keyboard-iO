@@ -723,10 +723,21 @@ private fun CustomizationTab(
                     val isVideo = mimeType.startsWith("video")
                     val fileName = if (isVideo) "custom_keyboard_bg.mp4" else "custom_keyboard_bg.jpg"
                     val destFile = File(context.filesDir, fileName)
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(destFile).use { output ->
+                    val tempFile = File(context.filesDir, "$fileName.tmp")
+                    val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(tempFile).use { output ->
                             input.copyTo(output)
+                            output.fd.sync()
                         }
+                        true
+                    } ?: false
+                    if (!copied || !tempFile.exists() || tempFile.length() == 0L) {
+                        tempFile.delete()
+                        throw IllegalStateException("File media kosong atau tidak dapat dibaca.")
+                    }
+                    if (!tempFile.renameTo(destFile)) {
+                        tempFile.copyTo(destFile, overwrite = true)
+                        tempFile.delete()
                     }
                     preferences.setCustomBackground(
                         type = if (isVideo) "VIDEO" else "IMAGE",

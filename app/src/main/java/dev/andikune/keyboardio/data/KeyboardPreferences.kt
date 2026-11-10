@@ -222,7 +222,7 @@ class KeyboardPreferences(context: Context) {
         _customBgType.value = type
         _customBgPath.value = path
         _customBgOpacity.value = opacity.coerceIn(0.1f, 1f)
-        _customBgDim.value = dim.coerceIn(0f, 0.9f)
+        _customBgDim.value = dim.coerceIn(0f, 0.75f)
     }
 
     fun setCustomBgOpacity(opacity: Float) {
@@ -232,7 +232,7 @@ class KeyboardPreferences(context: Context) {
     }
 
     fun setCustomBgDim(dim: Float) {
-        val clamped = dim.coerceIn(0f, 0.9f)
+        val clamped = dim.coerceIn(0f, 0.75f)
         prefs.edit().putFloat("custom_bg_dim", clamped).apply()
         _customBgDim.value = clamped
     }
