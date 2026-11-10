@@ -48,6 +48,14 @@ class ClipboardRepositoryTest {
     }
 
     @Test
+    fun preservesWhitespaceOnlyClipboardText() {
+        val repository = ClipboardRepository(context)
+        repository.addClip("   ")
+
+        assertEquals("   ", repository.items.value.single().text)
+    }
+
+    @Test
     fun keepsRepeatedCopyEventsAsSeparateHistoryEntries() {
         val repository = ClipboardRepository(context)
         repository.addClip("teks yang sama")

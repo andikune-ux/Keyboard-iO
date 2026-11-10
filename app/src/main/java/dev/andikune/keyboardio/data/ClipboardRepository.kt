@@ -101,7 +101,7 @@ class ClipboardRepository internal constructor(context: Context) {
 
     @Synchronized
     fun addClip(text: String) {
-        if (text.isBlank()) return
+        if (text.isEmpty()) return
 
         // Each copy is a separate history event, even when the text is identical.
         // IDs are monotonic so LazyColumn keys remain unique for rapid consecutive copies.
