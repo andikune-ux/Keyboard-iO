@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FormatSize
@@ -78,6 +79,7 @@ fun GridMenuPopup(
     onSoundClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onTypingActivityClick: () -> Unit = {},
+    onCalculatorClick: () -> Unit = {},
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -95,6 +97,13 @@ fun GridMenuPopup(
             subtitle = "24 Jam",
             icon = Icons.Default.History,
             color = rgbTheme.secondary
+        ),
+        GridMenuItem(
+            id = "calculator",
+            title = "Kalkulator",
+            subtitle = "Hitung cepat",
+            icon = Icons.Default.Calculate,
+            color = rgbTheme.primary
         ),
         GridMenuItem(
             id = "resize",
@@ -232,6 +241,7 @@ fun GridMenuPopup(
                         when (item.id) {
                             "settings" -> onSettingsClick()
                             "typing_activity" -> onTypingActivityClick()
+                            "calculator" -> onCalculatorClick()
                             "resize" -> onResizeClick()
                             "one_handed" -> onOneHandedClick()
                             "floating" -> onFloatingClick()

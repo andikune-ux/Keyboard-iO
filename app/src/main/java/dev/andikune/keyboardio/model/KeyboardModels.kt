@@ -32,7 +32,8 @@ enum class ActivePanel {
     NICKNAME_FONT,
     VOICE_INPUT,
     SOUND_SETTINGS,
-    TYPING_ACTIVITY
+    TYPING_ACTIVITY,
+    CALCULATOR
 }
 
 enum class SoundEffectType(val id: String, val displayName: String) {

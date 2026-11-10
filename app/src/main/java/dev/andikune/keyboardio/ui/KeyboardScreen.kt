@@ -644,7 +644,18 @@ fun KeyboardScreen(
                             onTypingActivityClick = {
                                 activePanel = ActivePanel.TYPING_ACTIVITY
                             },
+                            onCalculatorClick = { activePanel = ActivePanel.CALCULATOR },
                             onCloseClick = { activePanel = ActivePanel.NONE }
+                        )
+                    }
+                    ActivePanel.CALCULATOR -> {
+                        QuickCalculatorPanel(
+                            rgbTheme = rgbTheme,
+                            onInsertResult = { result ->
+                                onPasteText(result)
+                                activePanel = ActivePanel.NONE
+                            },
+                            onClose = { activePanel = ActivePanel.NONE }
                         )
                     }
                     ActivePanel.TYPING_ACTIVITY -> {
