@@ -1241,10 +1241,10 @@ private fun TopHeaderBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    suggestions.take(3).forEachIndexed { index, word ->
+                    suggestions.take(3).forEach { word ->
                         Box(
                             modifier = Modifier
-                                .weight(1f, fill = false)
+                                .weight(1f)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(CyberCard)
                                 .border(0.6.dp, rgbTheme.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
