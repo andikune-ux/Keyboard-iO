@@ -97,6 +97,12 @@ fun NicknameFontPanel(
             }
         }
 
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${NicknameFontGenerator.STYLES.size} gaya Unicode tersedia. Tampilan dapat berbeda tergantung dukungan font di aplikasi tujuan.",
+            color = TextTertiary,
+            fontSize = 10.sp
+        )
         Spacer(modifier = Modifier.height(6.dp))
 
         // Input field for nickname
