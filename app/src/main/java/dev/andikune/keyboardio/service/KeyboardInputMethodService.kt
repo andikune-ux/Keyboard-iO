@@ -38,6 +38,9 @@ import dev.andikune.keyboardio.data.TypingInputPrivacy
 import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
 import dev.andikune.keyboardio.data.EditorTextContextSynchronizer
+import dev.andikune.keyboardio.data.EditorInputConnectionContextReader
+import dev.andikune.keyboardio.data.EditorInputTypePolicy
+import dev.andikune.keyboardio.data.EditorWordReplacement
 import dev.andikune.keyboardio.data.UnicodeBackspaceEngine
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
@@ -95,8 +98,23 @@ class KeyboardInputMethodService : InputMethodService(),
         const val UNDO_CONTEXT_LENGTH = 32
     }
 
+    private var clipboardListenerRegistered = false
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         checkAndRecordClipboard()
+    }
+
+    private fun registerClipboardListener() {
+        if (clipboardListenerRegistered) return
+        (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+            ?.addPrimaryClipChangedListener(clipboardListener)
+        clipboardListenerRegistered = true
+    }
+
+    private fun unregisterClipboardListener() {
+        if (!clipboardListenerRegistered) return
+        (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+            ?.removePrimaryClipChangedListener(clipboardListener)
+        clipboardListenerRegistered = false
     }
 
     override fun onCreate() {
@@ -130,9 +148,6 @@ class KeyboardInputMethodService : InputMethodService(),
             getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
 
-        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboardManager?.addPrimaryClipChangedListener(clipboardListener)
-        checkAndRecordClipboard()
     }
 
     override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
@@ -211,6 +226,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        registerClipboardListener()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
@@ -222,14 +238,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
         val isNumberOnly = classType == InputType.TYPE_CLASS_PHONE ||
                 classType == InputType.TYPE_CLASS_NUMBER || classType == InputType.TYPE_CLASS_DATETIME
-        val isAutoCorrectionAllowed = classType == InputType.TYPE_CLASS_TEXT &&
-                variation != InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS &&
-                variation != InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
-                variation != InputType.TYPE_TEXT_VARIATION_URI &&
-                variation != InputType.TYPE_TEXT_VARIATION_PASSWORD &&
-                variation != InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD &&
-                variation != InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD &&
-                (inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) == 0
+        val inputCapabilities = EditorInputTypePolicy.resolve(inputType)
 
         val isMultiline = (inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT) &&
                 ((inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0)
@@ -252,7 +261,8 @@ class KeyboardInputMethodService : InputMethodService(),
         editorState.value = KeyboardEditorState(
             isPassword = isPassword,
             isNumberOnly = isNumberOnly,
-            isAutoCorrectionAllowed = isAutoCorrectionAllowed && !isPassword,
+            isAutoCorrectionAllowed = inputCapabilities.autoCorrectionAllowed && !isPassword,
+            isSuggestionsAllowed = inputCapabilities.suggestionsAllowed && !isPassword,
             enterAction = enterAction
         )
         composingWord.value = ""
@@ -270,9 +280,6 @@ class KeyboardInputMethodService : InputMethodService(),
         // Never retain password-field content, even if the editor changes mid-session.
         sessionCaptureAllowed = !isPassword
 
-        if (!isPassword) {
-            checkAndRecordClipboard()
-        }
     }
 
     override fun onUpdateSelection(
@@ -289,6 +296,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        unregisterClipboardListener()
         // Prevent delayed callbacks from committing after the keyboard is hidden.
         voiceInputManager?.cancelListening()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
@@ -300,8 +308,7 @@ class KeyboardInputMethodService : InputMethodService(),
 
     override fun onDestroy() {
         finishTypingSession()
-        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboardManager?.removePrimaryClipChangedListener(clipboardListener)
+        unregisterClipboardListener()
 
         audioFeedback?.release()
         audioFeedback = null
@@ -381,17 +388,26 @@ class KeyboardInputMethodService : InputMethodService(),
                             syncComposingWordFromEditor()
                             return
                         }
-                        val deleted = ic.deleteSurroundingTextInCodePoints(
-                            currentWord.codePointCount(0, currentWord.length), 0
+                        val replacement = EditorTextContextSynchronizer.autoCorrectionCommitText(
+                            autoFixed,
+                            editorContext.textAfterWord
                         )
-                        if (deleted) removeFromSessionSuffix(currentWord)
-                        val replacement = "$autoFixed "
-                        if (deleted && ic.commitText(replacement, 1)) {
+                        val result = EditorWordReplacement.replace(
+                            connection = ic,
+                            beforeCodePoints = currentWord.codePointCount(0, currentWord.length),
+                            afterCodePoints = 0,
+                            originalText = currentWord,
+                            replacementText = replacement
+                        )
+                        if (result.succeeded) {
+                            removeFromSessionSuffix(currentWord)
                             appendToSession(replacement)
                             recordUndo(currentWord, replacement)
                             userWordHistory.learn(autoFixed, previousWord.value)
                             composingWord.value = ""
                             previousWord.value = autoFixed.lowercase(Locale.ROOT)
+                        } else if (!result.rollbackSucceeded) {
+                            syncComposingWordFromEditor()
                         }
                         return
                     }
@@ -529,22 +545,24 @@ class KeyboardInputMethodService : InputMethodService(),
         val beforeCount = context.prefixBeforeCursor.codePointCount(0, context.prefixBeforeCursor.length)
         val afterCount = context.suffixAfterCursor.codePointCount(0, context.suffixAfterCursor.length)
         val deletedText = context.composingWord
-        if (deletedText.isNotEmpty()) {
-            if (!ic.deleteSurroundingTextInCodePoints(beforeCount, afterCount)) {
-                syncComposingWordFromEditor()
-                return
-            }
-            removeFromSessionSuffix(deletedText)
-        }
-
-        // Do not add a space before existing punctuation or existing text.
+        // Replace the complete token in one batch. If insertion fails after deletion,
+        // restore the original token before ending the editor transaction.
         val inserted = cleanWord + if (context.textAfterWord.isEmpty()) " " else ""
-        if (ic.commitText(inserted, 1)) {
+        val result = EditorWordReplacement.replace(
+            connection = ic,
+            beforeCodePoints = beforeCount,
+            afterCodePoints = afterCount,
+            originalText = deletedText,
+            replacementText = inserted
+        )
+        if (result.succeeded) {
+            if (deletedText.isNotEmpty()) removeFromSessionSuffix(deletedText)
             appendToSession(inserted)
             recordUndo(deletedText, inserted)
             userWordHistory.learn(cleanWord, context.previousWord)
-        } else if (deletedText.isNotEmpty()) {
-            ic.commitText(deletedText, 1)
+        } else if (!result.rollbackSucceeded) {
+            syncComposingWordFromEditor()
+            return
         }
         syncComposingWordFromEditor()
     }
@@ -565,13 +583,8 @@ class KeyboardInputMethodService : InputMethodService(),
         while (undoStack.size > MAX_UNDO_OPERATIONS) undoStack.removeAt(0)
     }
 
-    private fun readEditorContext(): EditorTextContextSynchronizer.Snapshot? {
-        val ic = currentInputConnection ?: return null
-        val before = ic.getTextBeforeCursor(EditorTextContextSynchronizer.MAX_CONTEXT_CHARS, 0)?.toString().orEmpty()
-        val after = ic.getTextAfterCursor(EditorTextContextSynchronizer.MAX_CONTEXT_CHARS, 0)?.toString().orEmpty()
-        val hasSelection = !ic.getSelectedText(0).isNullOrEmpty()
-        return EditorTextContextSynchronizer.resolve(before, after, hasSelection)
-    }
+    private fun readEditorContext(): EditorTextContextSynchronizer.Snapshot? =
+        EditorInputConnectionContextReader.read(currentInputConnection)
 
     private fun syncComposingWordFromEditor(hasSelection: Boolean = false) {
         val context = readEditorContext() ?: return
