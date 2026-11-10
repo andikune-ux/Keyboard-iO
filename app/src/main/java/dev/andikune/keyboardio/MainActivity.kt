@@ -66,6 +66,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -768,6 +769,13 @@ private fun CustomizationTab(
                     pendingTempFile?.delete()
                     pendingDestinationFile?.delete()
                     Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            "Gagal memuat wallpaper. Coba pilih file foto/video lain.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
