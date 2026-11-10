@@ -66,6 +66,32 @@ class ClipboardRepositoryTest {
     }
 
     @Test
+    fun removesOnlyKnownLegacyDemoEntriesDuringMigration() {
+        val oldDemo = JSONObject().apply {
+            put("id", 1L)
+            put("text", "Keyboard iO - Next-Gen RGB Typing")
+            put("timestamp", 1L)
+            put("isPinned", true)
+        }
+        val realCopy = JSONObject().apply {
+            put("id", 2L)
+            put("text", "https://example.com")
+            put("timestamp", 2L)
+            put("isPinned", false)
+        }
+        context.getSharedPreferences("keyboard_io_clipboard", Context.MODE_PRIVATE)
+            .edit().putString("clips_json", JSONArray().put(oldDemo).put(realCopy).toString()).commit()
+
+        val repository = ClipboardRepository(context)
+        assertEquals(1, repository.items.value.size)
+        assertEquals("https://example.com", repository.items.value.single().text)
+
+        val restored = ClipboardRepository(context)
+        assertEquals(1, restored.items.value.size)
+        assertEquals("https://example.com", restored.items.value.single().text)
+    }
+
+    @Test
     fun keepsOldEntriesWithoutAutomaticExpiry() {
         val oldItem = JSONObject().apply {
             put("id", 100L)

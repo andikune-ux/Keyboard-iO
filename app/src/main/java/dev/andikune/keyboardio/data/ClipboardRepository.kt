@@ -14,6 +14,14 @@ class ClipboardRepository internal constructor(context: Context) {
     companion object {
         private const val TAG = "ClipboardRepository"
 
+        // Remove only the exact demo entries shipped by an older build.
+        // Real clipboard records are never expired, capped, or deduplicated.
+        private val LEGACY_DEMO_TEXTS = setOf(
+            "Keyboard iO - Next-Gen RGB Typing",
+            "https://github.com/andikune",
+            "dev.andikune.keyboardio"
+        )
+
         @Volatile
         private var instance: ClipboardRepository? = null
 
@@ -59,12 +67,15 @@ class ClipboardRepository internal constructor(context: Context) {
                     )
                 )
             }
-            // Repair duplicate legacy IDs without discarding any history entries.
-            // Never expire, filter, deduplicate by text, or cap clipboard history.
-            val highestExistingId = list.maxOfOrNull { it.id } ?: 0L
+            // One-time cleanup of known fake demo entries from older releases.
+            // This does not affect any real copied text, including duplicate copies.
+            val realHistory = list.filterNot { it.text in LEGACY_DEMO_TEXTS }
+            // Repair duplicate legacy IDs without discarding real history entries.
+            // Never expire, cap, or deduplicate real clipboard history.
+            val highestExistingId = realHistory.maxOfOrNull { it.id } ?: 0L
             var generatedId = maxOf(System.currentTimeMillis(), highestExistingId + 1L)
             val usedIds = mutableSetOf<Long>()
-            val withUniqueIds = list.map { item ->
+            val withUniqueIds = realHistory.map { item ->
                 if (usedIds.add(item.id)) {
                     item
                 } else {
@@ -75,7 +86,7 @@ class ClipboardRepository internal constructor(context: Context) {
                 compareByDescending<ClipboardItem> { it.timestamp }.thenByDescending { it.id }
             )
             nextItemId = generatedId
-            if (withUniqueIds.map { it.id } != list.map { it.id }) {
+            if (withUniqueIds.map { it.id } != list.map { it.id } || realHistory.size != list.size) {
                 saveItems(_items.value)
             }
         } catch (exception: Exception) {
