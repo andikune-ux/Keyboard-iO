@@ -4,6 +4,9 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -757,6 +760,41 @@ private fun CustomizationTab(
                         tempFile.copyTo(destFile, overwrite = true)
                         tempFile.delete()
                     }
+
+                    // Reject corrupt or mislabeled media before replacing the current wallpaper.
+                    if (isVideo) {
+                        val retriever = MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(destFile.absolutePath)
+                            val width = retriever.extractMetadata(
+                                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                            )?.toIntOrNull() ?: 0
+                            val height = retriever.extractMetadata(
+                                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                            )?.toIntOrNull() ?: 0
+                            if (width <= 0 || height <= 0) {
+                                throw IllegalArgumentException("Video tidak valid atau tidak didukung.")
+                            }
+                        } finally {
+                            retriever.release()
+                        }
+                    } else {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(destFile.absolutePath, bounds)
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                            throw IllegalArgumentException("Gambar rusak atau tidak didukung.")
+                        }
+                        val sampleSize = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 512)
+                        val decoded = BitmapFactory.decodeFile(
+                            destFile.absolutePath,
+                            BitmapFactory.Options().apply {
+                                inSampleSize = sampleSize
+                                inPreferredConfig = Bitmap.Config.RGB_565
+                            }
+                        ) ?: throw IllegalArgumentException("Gambar tidak dapat didekode.")
+                        decoded.recycle()
+                    }
+
                     preferences.setCustomBackground(
                         type = if (isVideo) "VIDEO" else "IMAGE",
                         path = destFile.absolutePath,
