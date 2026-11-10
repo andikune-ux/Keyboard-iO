@@ -333,10 +333,16 @@ class KeyboardInputMethodService : InputMethodService(),
                         recordUndo(selected, "")
                     }
                 } else {
-                    val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
-                    if (before.isNotEmpty()) {
-                        val removed = String(Character.toChars(Character.codePointBefore(before, before.length)))
-                        if (ic.deleteSurroundingTextInCodePoints(1, 0)) {
+                    // Read enough UTF-16 context to cover multi-code-point grapheme clusters
+                    // such as family emoji, flags, skin-tone sequences and combining marks.
+                    val before = ic.getTextBeforeCursor(128, 0)?.toString().orEmpty()
+                    val deletion = UnicodeBackspaceEngine.previousGrapheme(before)
+                    if (deletion != null) {
+                        val removed = before.substring(deletion.utf16Start)
+                        val deleted = runCatching {
+                            ic.deleteSurroundingTextInCodePoints(deletion.codePointCount, 0)
+                        }.getOrDefault(false)
+                        if (deleted) {
                             removeFromSessionSuffix(removed)
                             recordUndo(removed, "")
                         }
