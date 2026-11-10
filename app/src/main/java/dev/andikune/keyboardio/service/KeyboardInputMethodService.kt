@@ -36,6 +36,7 @@ import dev.andikune.keyboardio.data.TypingActivityStore
 import dev.andikune.keyboardio.data.TypingInputPrivacy
 import dev.andikune.keyboardio.data.UserWordHistory
 import dev.andikune.keyboardio.data.WordSuggester
+import dev.andikune.keyboardio.data.UnicodeBackspaceEngine
 import dev.andikune.keyboardio.model.EnterActionType
 import dev.andikune.keyboardio.model.KeyAction
 import dev.andikune.keyboardio.model.KeyboardEditorState

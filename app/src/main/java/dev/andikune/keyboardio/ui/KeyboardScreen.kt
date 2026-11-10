@@ -786,7 +786,7 @@ fun KeyboardScreen(
                                 .weight(1f)
                                 .padding(horizontal = 2.dp)
                                 .pointerInput(isSwipeTypingEnabled, layoutMode, baseKeyHeight, learnedWords, oneHandedMode, onSuggestionPicked) {
-                                    val keyboardWidth = size.width
+                                    val keyboardWidth = size.width.toFloat()
                                     val rowHeightPx = baseKeyHeight.toPx() + 6.dp.toPx()
                                     val touchSlopPx = viewConfiguration.touchSlop
                                     if (isSwipeTypingEnabled && layoutMode in setOf(KeyboardLayoutMode.QWERTY_LOWER, KeyboardLayoutMode.QWERTY_UPPER, KeyboardLayoutMode.CAPS_LOCK)) {
@@ -805,9 +805,23 @@ fun KeyboardScreen(
                                             if (letterAt(down.position) != null) {
                                                 swipeTrail.clear()
                                                 collectKey(down.position)
-                                                while (true) {
-                                                    val event = awaitPointerEvent(PointerEventPass.Final)
-                                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                try {
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(PointerEventPass.Final)
+                                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                        if (!change.pressed) {
+                                                            if (dragging && pathLetters.length >= 3) WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
+                                                            break
+                                                        }
+                                                        if (!dragging && (change.position - down.position).getDistance() > touchSlopPx) dragging = true
+                                                        if (dragging) { collectKey(change.position); change.consume() }
+                                                    }
+                                                } finally {
+                                                    swipeTrail.clear()
+                                                }
+                                            }
+                                        }
+                                    }
                                                     if (!change.pressed) {
                                                         if (dragging && pathLetters.length >= 3) WordSuggester.getSwipeSuggestion(pathLetters.toString(), learnedWords)?.let(onSuggestionPicked)
                                                         break
