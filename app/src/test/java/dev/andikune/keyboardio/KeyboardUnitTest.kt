@@ -6,6 +6,7 @@ import dev.andikune.keyboardio.model.KeyboardLayouts
 import dev.andikune.keyboardio.model.RgbThemeStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -203,6 +204,7 @@ class KeyboardUnitTest {
         styles.forEach { style ->
             val converted = dev.andikune.keyboardio.data.NicknameFontGenerator.convertText(sample, style.id)
             assertNotNull(converted)
+            assertNotEquals("Style ${style.id} should transform the sample", sample, converted)
             assertTrue("Style ${style.id} should keep emoji", converted.contains("😀"))
             assertTrue("Style ${style.id} should keep spaces", converted.contains(" "))
         }
