@@ -250,6 +250,7 @@ class KeyboardInputMethodService : InputMethodService(),
             sessionStartTime = System.currentTimeMillis()
             sessionText.setLength(0)
             sessionActive = true
+            typingActivityStore.beginSession(sessionStartTime)
         }
         // Never retain password-field content, even if the editor changes mid-session.
         sessionCaptureAllowed = !isPassword
@@ -538,12 +539,18 @@ class KeyboardInputMethodService : InputMethodService(),
     }
 
     private fun appendToSession(text: String) {
-        if (sessionActive && sessionCaptureAllowed && text.isNotEmpty()) sessionText.append(text)
+        if (sessionActive && sessionCaptureAllowed && text.isNotEmpty()) {
+            sessionText.append(text)
+            typingActivityStore.updateActiveSession(sessionStartTime, sessionText.toString())
+        }
     }
 
     private fun removeFromSessionSuffix(text: String) {
-        if (!sessionActive || text.isEmpty()) return
-        if (sessionText.endsWith(text)) sessionText.setLength(sessionText.length - text.length)
+        if (!sessionActive || !sessionCaptureAllowed || text.isEmpty()) return
+        if (sessionText.endsWith(text)) {
+            sessionText.setLength(sessionText.length - text.length)
+            typingActivityStore.updateActiveSession(sessionStartTime, sessionText.toString())
+        }
     }
 
     private fun replaceSessionSuffix(oldText: String, newText: String) {
