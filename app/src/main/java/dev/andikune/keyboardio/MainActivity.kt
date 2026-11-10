@@ -746,6 +746,8 @@ private fun CustomizationTab(
                         dim = 0.10f
                     )
                 }.onFailure {
+                    File(context.filesDir, "custom_keyboard_bg.jpg.tmp").delete()
+                    File(context.filesDir, "custom_keyboard_bg.mp4.tmp").delete()
                     Log.e("MainActivity", "Gagal menyimpan latar belakang kustom", it)
                 }
             }

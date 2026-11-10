@@ -1443,10 +1443,8 @@ private fun SafeVideoBackground(
                         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
 
                         override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                            runCatching {
-                                mediaPlayer?.stop()
-                                mediaPlayer?.release()
-                            }
+                            runCatching { mediaPlayer?.stop() }
+                            runCatching { mediaPlayer?.release() }
                             mediaPlayer = null
                             runCatching { videoSurface?.release() }
                             videoSurface = null
